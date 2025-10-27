@@ -14,4 +14,4 @@ ENV APP_HOME=/usr/local/lib/python3.13/site-packages/aktools
 WORKDIR $APP_HOME
 
 # 默认启动 gunicorn 服务
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app", "-k", "uvicorn.workers.UvicornWorker"]
+CMD ["gunicorn", "--bind", "0.0.0.0:7860", "main:app", "-k", "uvicorn.workers.UvicornWorker"]
