@@ -45,8 +45,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          platforms: linux/arm64
-#          platforms: linux/amd64,linux/arm64   # 👈 支持双架构
+#          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64   # 👈 支持双架构
           tags: |
             ghcr.io/selfassets/akshare:latest
             ghcr.io/selfassets/akshare:${{ github.ref_name }}
