@@ -4,6 +4,8 @@
 
 | AKShare 版本 | 旧接口名称                                       | 新接口名称                                       | 修改日期     |
 |------------|---------------------------------------------|---------------------------------------------|----------|
+| 1.17.81    | get_czce_rank_table                         | get_rank_table_czce                         | 20251103 |
+| 1.17.81    | futures_czce_warehouse_receipt              | futures_warehouse_receipt_czce              | 20251103 |
 | 1.17.72    | futures_dce_warehouse_receipt               | futures_warehouse_receipt_dce               | 20251027 |
 | 1.17.68    | option_gfex_vol_daily                       | option_vol_gfex                             | 20251017 |
 | 1.17.68    | option_gfex_daily                           | option_hist_gfex                            | 20251017 |
@@ -86,6 +88,67 @@
 | 1.4.86     | fund_em_aum                                 | fund_aum_em                                 | 20220322 |
 
 ## 更新说明详情
+
+1.17.87 fix: fix stock_dividend_cninfo interface
+
+	1. 修复 stock_dividend_cninfo 接口
+	2. 修复 stock_news_em 接口
+
+1.17.86 fix: fix stock_news_em interface
+
+	1. 修复 stock_news_em 接口
+
+1.17.85 fix: fix news_trade_notify_dividend_baidu interface
+
+	1. 修复 news_trade_notify_dividend_baidu 接口
+
+1.17.84 fix: fix stock_individual_spot_xq interface
+
+	1. 修复 stock_individual_spot_xq 接口
+
+1.17.83 fix: fix stock_cyq_em interface
+
+	1. 修复 stock_cyq_em 接口
+
+1.17.82 fix: fix stock_notice_report interface
+
+	1. 修复 stock_notice_report 接口
+
+1.17.81 fix: fix get_receipt interface
+
+	1. 修复 get_receipt 接口
+	2. 修复 get_rank_table_czce 接口
+	3. 修复 futures_warehouse_receipt_czce 接口
+
+1.17.80 fix: fix futures_contract_detail_em interface
+
+	1. 新增 futures_contract_detail_em 接口
+	2. 新增 option_contract_info_ctp 接口
+
+1.17.79 fix: fix futures_contract_info_dce interface
+
+	1. 修复 futures_contract_info_dce 接口
+	2. 修复 stock_a_ttm_lyr 接口
+
+1.17.78 fix: fix update python 3.14 support
+
+	1. 支持 Python 3.14 版本
+
+1.17.77 fix: fix get_dce_daily interface
+
+	1. 修复 get_dce_daily 接口
+
+1.17.76 fix: fix futures_index_ccidx interface
+
+	1. 修复 futures_index_ccidx 接口
+
+1.17.75 fix: fix stock_a_ttm_lyr interface
+
+	1. 修复 stock_a_ttm_lyr 接口
+
+1.17.74 fix: fix futures_dce_position_rank interface
+
+	1. 修复 futures_dce_position_rank 接口
 
 1.17.73 fix: fix get_receipt interface
 
@@ -5896,6 +5959,34 @@
     3. 修改 air_quality_hist 接口的请求日期格式，从 '2022-01-01' 为 '20220101'
 
 ## 版本更新说明
+
+1.17.87 fix: fix stock_dividend_cninfo interface
+
+1.17.86 fix: fix stock_news_em interface
+
+1.17.85 fix: fix news_trade_notify_dividend_baidu interface
+
+1.17.84 fix: fix stock_individual_spot_xq interface
+
+1.17.83 fix: fix stock_cyq_em interface
+
+1.17.82 fix: fix stock_notice_report interface
+
+1.17.81 fix: fix get_receipt interface
+
+1.17.80 fix: fix futures_contract_detail_em interface
+
+1.17.79 fix: fix futures_contract_info_dce interface
+
+1.17.78 fix: fix update python 3.14 support
+
+1.17.77 fix: fix get_dce_daily interface
+
+1.17.76 fix: fix futures_index_ccidx interface
+
+1.17.75 fix: fix stock_a_ttm_lyr interface
+
+1.17.74 fix: fix futures_dce_position_rank interface
 
 1.17.73 fix: fix get_receipt interface
 

@@ -848,7 +848,7 @@ import akshare as ak
 
 ak.get_dce_rank_table()
 ak.get_cffex_rank_table()
-ak.get_czce_rank_table()
+ak.get_rank_table_czce()
 ak.get_shfe_rank_table()
 ```
 
@@ -857,8 +857,8 @@ ak.get_shfe_rank_table()
 ```python
 import akshare as ak
 
-get_czce_rank_table_df = ak.get_czce_rank_table(date='20200213')
-print(get_czce_rank_table_df)
+get_rank_table_czce_df = ak.get_rank_table_czce(date='20200213')
+print(get_rank_table_czce_df)
 ```
 
 注意:
@@ -1073,7 +1073,7 @@ print(futures_gfex_position_rank_dict)
 
 ##### 仓单日报-郑州商品交易所
 
-接口: futures_czce_warehouse_receipt
+接口: futures_warehouse_receipt_czce
 
 目标地址: http://www.czce.com.cn/cn/jysj/cdrb/H770310index_1.htm
 
@@ -1098,8 +1098,8 @@ print(futures_gfex_position_rank_dict)
 ```python
 import akshare as ak
 
-futures_czce_warehouse_receipt_df = ak.futures_czce_warehouse_receipt(date="20200702")
-print(futures_czce_warehouse_receipt_df)
+futures_warehouse_receipt_czce_df = ak.futures_warehouse_receipt_czce(date="20200702")
+print(futures_warehouse_receipt_czce_df)
 ```
 
 数据示例
@@ -2220,9 +2220,9 @@ print(futures_contract_info_ine_df)
 
 接口: futures_contract_info_dce
 
-目标地址: http://www.dce.com.cn/dalianshangpin/ywfw/ywcs/jycs/hyxxcx/index.html
+目标地址: http://www.dce.com.cn/dce/channel/list/180.html
 
-描述: 大连商品交易所-业务/服务-业务参数-交易参数-合约信息查询
+描述: 大连商品交易所-数据中心-业务数据-交易参数-合约信息
 
 限量: 单次返回最近交易日的期货合约信息数据
 
@@ -2256,19 +2256,19 @@ print(futures_contract_info_dce_df)
 数据示例
 
 ```
-     品种  合约代码  交易单位 最小变动价位  开始交易日  最后交易日  最后交割日
-0    豆一  a2403    10     1.0  2023-03-15  2024-03-14  2024-03-19
-1    豆一  a2405    10     1.0  2023-05-18  2024-05-17  2024-05-22
-2    豆一  a2407    10     1.0  2023-07-17  2024-07-12  2024-07-17
-3    豆一  a2409    10     1.0  2023-09-15  2024-09-13  2024-09-20
-4    豆一  a2411    10     1.0  2023-11-15  2024-11-14  2024-11-19
-..   ..    ...   ...     ...         ...         ...         ...
-215  豆油  y2408    10     2.0  2023-08-15  2024-08-14  2024-08-19
-216  豆油  y2409    10     2.0  2023-09-15  2024-09-13  2024-09-20
-217  豆油  y2411    10     2.0  2023-11-15  2024-11-14  2024-11-19
-218  豆油  y2412    10     2.0  2023-12-15  2024-12-13  2024-12-18
-219  豆油  y2501    10     2.0  2024-01-16  2025-01-15  2025-01-20
-[220 rows x 7 columns]
+    品种名称 合约  交易单位  最小变动价位  开始交易日 最后交易日   最后交割日
+0     豆一  a2511    10     1.0  2024-11-15  2025-11-14  2025-11-19
+1     豆一  a2601    10     1.0  2025-01-16  2026-01-15  2026-01-20
+2     豆一  a2603    10     1.0  2025-03-17  2026-03-13  2026-03-18
+3     豆一  a2605    10     1.0  2025-05-20  2026-05-19  2026-05-22
+4     豆一  a2607    10     1.0  2025-07-15  2026-07-14  2026-07-17
+..   ...    ...   ...     ...         ...         ...         ...
+232   豆油  y2603    10     2.0  2025-03-17  2026-03-13  2026-03-18
+233   豆油  y2605    10     2.0  2025-05-20  2026-05-19  2026-05-22
+234   豆油  y2607    10     2.0  2025-07-15  2026-07-14  2026-07-17
+235   豆油  y2608    10     2.0  2025-08-15  2026-08-14  2026-08-19
+236   豆油  y2609    10     2.0  2025-09-15  2026-09-14  2026-09-17
+[237 rows x 7 columns]
 ```
 
 ##### 郑州商品交易所
@@ -3639,7 +3639,7 @@ print(futures_display_main_sina_df)
 62    TS0    cffex    2年期国债期货连续
 ```
 
-### 期货合约详情
+### 期货合约详情-新浪
 
 接口: futures_contract_detail
 
@@ -3773,6 +3773,59 @@ print(futures_contract_detail_df)
 14    上市交易所                                            大连商品交易所
 ```
 
+### 期货合约详情-东财
+
+接口: futures_contract_detail_em
+
+目标地址: https://quote.eastmoney.com/qihuo/v2602F.html
+
+描述: 东方财富-期货-期货合约详情数据
+
+限量: 单次返回指定 symbol 的合约详情数据
+
+输入参数
+
+| 名称     | 类型  | 描述                                                                              |
+|--------|-----|---------------------------------------------------------------------------------|
+| symbol | str | symbol='v2602F'; 请参考东方财富的期货品种标识：https://quote.eastmoney.com/center/futures.html |
+
+输出参数
+
+| 名称    | 类型     | 描述       |
+|-------|--------|----------|
+| item  | object | 合约具体的项目  |
+| value | object | 合约具体的项目值 |
+
+接口示例
+
+```python
+import akshare as ak
+
+futures_contract_detail_em_df = ak.futures_contract_detail_em(symbol="v2603F")
+print(futures_contract_detail_em_df)
+```
+
+数据示例
+
+```
+       item                                              value
+0      交易品种                                               聚氯乙烯
+1    最小变动价位                                               5元/吨
+2      交易时间  上午 09:00-10:15 10:30-11:30 下午 13:30-15:00 夜间 2...
+3      交割品级  质量标准符合《悬浮法通用型聚氯乙烯树脂（GB/T 5761-2006）》规定的SG5型一等品...
+4      交割方式                                               实物交割
+5      交易单位                                               5吨/手
+6    涨跌停板幅度                                       上一交易日结算价的±4%
+7     最后交易日                                        合约月份第10个交易日
+8   最低交易保证金                                投机买卖20.0%，套保买卖20.0%
+9      交易代码                                                  V
+10     报价单位                                           元(人民币/吨)
+11   合约交割月份                                            1---12月
+12    最后交割日                                       最后交易日后第3个交易日
+13    交易手续费                                  开平仓1元/手，短线开平仓1元/手
+14    上市交易所                                            大连商品交易所
+```
+
 ### 中证商品指数
 
 #### 中证商品指数
@@ -3827,55 +3880,6 @@ print(futures_index_ccidx_df)
 963  2025-02-11  100001.CCI  1981.76  1985.65   6.00  0.30
 964  2025-02-12  100001.CCI  1986.45  1981.82  -3.83 -0.19
 [965 rows x 6 columns]
-```
-
-#### 中证商品指数-分时
-
-接口: futures_index_min_ccidx
-
-目标地址: http://www.ccidx.com/index.html
-
-描述: 中证商品指数-分时数据
-
-限量: 单次返回指定 symbol 的指数分时数据
-
-输入参数
-
-| 名称     | 类型  | 描述                                                                                                                      |
-|--------|-----|-------------------------------------------------------------------------------------------------------------------------|
-| symbol | str | symbol="中证监控油脂油料期货指数"; choice of {"中证商品期货指数", "中证商品期货价格指数", "中证监控油脂油料期货指数", "中证监控软商品期货指数",  "中证监控能化期货指数", "中证监控钢铁期货指数"} |
-
-输出参数
-
-| 名称       | 类型      | 描述  |
-|----------|---------|-----|
-| datetime | object  |     |
-| value    | object  | 最新价 |
-
-接口示例
-
-```python
-import akshare as ak
-
-futures_index_min_ccidx_df = ak.futures_index_min_ccidx(symbol="中证商品期货指数")
-print(futures_index_min_ccidx_df)
-```
-
-数据示例
-
-```
-             datetime      value
-0    2022-12-27 21:00  1802.6834
-1    2022-12-27 21:01  1801.8893
-2    2022-12-27 21:02  1802.0698
-3    2022-12-27 21:03  1802.5329
-4    2022-12-27 21:04  1803.5531
-..                ...        ...
-554  2022-12-28 14:56  1798.3488
-555  2022-12-28 14:57  1798.1081
-556  2022-12-28 14:58  1797.4098
-557  2022-12-28 14:59  1797.7608
-558  2022-12-28 15:00  1797.7799
 ```
 
 ### 现货与股票
