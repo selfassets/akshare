@@ -184,8 +184,8 @@ def futures_hist_em(
 
 
 if __name__ == "__main__":
-    futures_hist_table_em_df = futures_hist_table_em()
-    print(futures_hist_table_em_df)
+    # futures_hist_table_em_df = futures_hist_table_em()
+    # print(futures_hist_table_em_df)
 
     futures_hist_em_df = futures_hist_em(symbol="热卷主连", period="daily")
     print(futures_hist_em_df)
