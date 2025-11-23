@@ -13,7 +13,7 @@ from akshare.futures.futures_comm_qihuo import futures_comm_info
 # 配置日志
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/futures", tags=["futures"])
+router = APIRouter()
 
 
 def _handle_api_request(func: Callable, **kwargs) -> Response:
