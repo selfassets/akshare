@@ -2,11 +2,11 @@ from typing import Optional, List, Dict, Any, Literal, Callable
 import logging
 import requests
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 import pandas as pd
 
 from akshare import futures_fees_info
-from akshare.futures.futures_hist_em import futures_hist_em
+from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em
 from akshare.futures.futures_inventory_99 import futures_inventory_99
 from akshare.futures.futures_comm_qihuo import futures_comm_info
 
@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/futures", tags=["futures"])
 
 
-def _handle_api_request(func: Callable, **kwargs) -> List[Dict[str, Any]]:
+def _handle_api_request(func: Callable, **kwargs) -> Response:
     """
     Helper function to handle API requests, logging, and error handling.
+    Optimized for memory usage by using direct JSON serialization.
     """
     func_name = func.__name__
     logger.info(f"Requesting {func_name} with args: {kwargs}")
@@ -27,11 +28,12 @@ def _handle_api_request(func: Callable, **kwargs) -> List[Dict[str, Any]]:
 
         if df.empty:
             logger.warning(f"No data found for {func_name} with args: {kwargs}")
-            return []
+            return Response(content="[]", media_type="application/json")
 
-        # Convert DataFrame to list of dicts, handling date serialization
-        data = df.to_dict(orient="records")
-        return data
+        # Use to_json to serialize directly to string, avoiding large intermediate dicts
+        # force_ascii=False ensures Chinese characters are not escaped
+        json_str = df.to_json(orient="records", force_ascii=False, date_format="iso")
+        return Response(content=json_str, media_type="application/json")
 
     except requests.exceptions.RequestException as e:
         logger.error(f"HTTP request failed in {func_name}: {e}", exc_info=True)
@@ -103,3 +105,13 @@ async def get_futures_comm_info(
     获取九期网-期货手续费
     """
     return _handle_api_request(futures_comm_info, symbol=symbol)
+
+
+@router.get("/futures_hist_table_em", response_model=List[Dict[str, Any]])
+async def get_futures_hist_table_em():
+    """
+    获取东方财富网-期货行情-交易所品种对照表
+    """
+    return _handle_api_request(futures_hist_table_em)
+
+

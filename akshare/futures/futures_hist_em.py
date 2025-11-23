@@ -35,13 +35,13 @@ def __futures_hist_separate_char_and_numbers_em(symbol: str = "焦煤2506") -> t
     return char[0], numbers[0]
 
 
-@lru_cache()
-def __fetch_exchange_symbol_raw_em() -> list:
+# @lru_cache()
+def __fetch_exchange_symbol_raw_em() -> iter:
     """
     东方财富网-期货行情-交易所品种对照表原始数据
     https://quote.eastmoney.com/qihuo/al2505.html
     :return: 交易所品种对照表原始数据
-    :rtype: pandas.DataFrame
+    :rtype: iter
     """
     logger.info("开始获取交易所品种原始数据")
     url = "https://futsse-static.eastmoney.com/redis"
@@ -53,7 +53,6 @@ def __fetch_exchange_symbol_raw_em() -> list:
         data_json = r.json()
         logger.info(f"成功获取主品种数据, 共 {len(data_json)} 个市场")
 
-        all_exchange_symbol_list = []
         for idx, item in enumerate(data_json):
             market_id = item["mktid"]
             logger.debug(f"处理市场 {idx + 1}/{len(data_json)}, 市场ID: {market_id}")
@@ -69,11 +68,11 @@ def __fetch_exchange_symbol_raw_em() -> list:
                 r = requests.get(url, params=params)
                 r.raise_for_status()
                 inner_data_json = r.json()
-                all_exchange_symbol_list.extend(inner_data_json)
+                for inner_item in inner_data_json:
+                    yield inner_item
                 logger.debug(f"市场 {market_id} 第 {num} 组: 获得 {len(inner_data_json)} 条记录")
 
-        logger.info(f"成功获取所有交易所品种数据, 总计 {len(all_exchange_symbol_list)} 条记录")
-        return all_exchange_symbol_list
+        logger.info("成功获取所有交易所品种数据")
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {e}", exc_info=True)
         raise
@@ -113,7 +112,7 @@ def __get_exchange_symbol_map() -> Tuple[Dict, Dict, Dict, Dict]:
         logger.error(f"构建交易所品种映射出错: {e}", exc_info=True)
         raise
 
-
+@lru_cache()
 def futures_hist_table_em() -> pd.DataFrame:
     """
     东方财富网-期货行情-交易所品种对照表
@@ -124,7 +123,7 @@ def futures_hist_table_em() -> pd.DataFrame:
     logger.info("开始获取期货历史表")
     try:
         all_exchange_symbol_list = __fetch_exchange_symbol_raw_em()
-        logger.debug(f"准备转换 {len(all_exchange_symbol_list)} 条记录为 DataFrame")
+        logger.debug("准备转换数据为 DataFrame")
 
         temp_df = pd.DataFrame(all_exchange_symbol_list)
         temp_df = temp_df[["mktname", "name", "code"]]
