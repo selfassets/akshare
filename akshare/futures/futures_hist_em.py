@@ -8,6 +8,8 @@ https://qhweb.eastmoney.com/quote
 
 import logging
 import re
+import json
+import os
 from functools import lru_cache
 from typing import Tuple, Dict
 
@@ -37,6 +39,30 @@ def __futures_hist_separate_char_and_numbers_em(symbol: str = "焦煤2506") -> t
 
 # @lru_cache()
 def __fetch_exchange_symbol_raw_em() -> iter:
+    """
+    东方财富网-期货行情-交易所品种对照表原始数据
+    https://quote.eastmoney.com/qihuo/al2505.html
+    :return: 交易所品种对照表原始数据
+    :rtype: iter
+    """
+    logger.info("开始获取交易所品种原始数据")
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), "__fetch_exchange_symbol_raw_em.json")
+        with open(file_path, "r", encoding="utf-8") as f:
+            data_json = json.load(f)
+        
+        logger.info(f"成功读取本地数据, 共 {len(data_json)} 条记录")
+        for item in data_json:
+            yield item
+
+        logger.info("成功获取所有交易所品种数据")
+    except Exception as e:
+        logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
+        raise
+
+
+# @lru_cache()
+def __fetch_exchange_symbol_raw_em_bak() -> iter:
     """
     东方财富网-期货行情-交易所品种对照表原始数据
     https://quote.eastmoney.com/qihuo/al2505.html
@@ -79,7 +105,6 @@ def __fetch_exchange_symbol_raw_em() -> iter:
     except Exception as e:
         logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
         raise
-
 
 @lru_cache()
 def __get_exchange_symbol_map() -> Tuple[Dict, Dict, Dict, Dict]:
@@ -126,8 +151,8 @@ def futures_hist_table_em() -> pd.DataFrame:
         logger.debug("准备转换数据为 DataFrame")
 
         temp_df = pd.DataFrame(all_exchange_symbol_list)
-        temp_df = temp_df[["mktname", "name", "code"]]
-        temp_df.columns = ["市场简称", "合约中文代码", "合约代码"]
+        # temp_df = temp_df[["mktname", "name", "code"]]
+        # temp_df.columns = ["市场简称", "合约中文代码", "合约代码"]
 
         logger.info(f"期货历史表获取成功, 共 {len(temp_df)} 行 {len(temp_df.columns)} 列")
         logger.debug(f"表头: {list(temp_df.columns)}")
