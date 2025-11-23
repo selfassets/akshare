@@ -20,7 +20,15 @@ app.include_router(futures.router, prefix="/futures", tags=["futures"])
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to AKShare API"}
+    return {
+        "name": "AKShare API",
+        "version": "0.0.1",
+        "description": "AKShare HTTP API interface",
+        "documentation": "/docs",
+        "endpoints": [
+            "/futures"
+        ]
+    }
 
 
 if __name__ == "__main__":
