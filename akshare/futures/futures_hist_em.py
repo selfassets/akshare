@@ -37,32 +37,8 @@ def __futures_hist_separate_char_and_numbers_em(symbol: str = "焦煤2506") -> t
     return char[0], numbers[0]
 
 
-# @lru_cache()
+@lru_cache()
 def __fetch_exchange_symbol_raw_em() -> iter:
-    """
-    东方财富网-期货行情-交易所品种对照表原始数据
-    https://quote.eastmoney.com/qihuo/al2505.html
-    :return: 交易所品种对照表原始数据
-    :rtype: iter
-    """
-    logger.info("开始获取交易所品种原始数据")
-    try:
-        file_path = os.path.join(os.path.dirname(__file__), "__fetch_exchange_symbol_raw_em.json")
-        with open(file_path, "r", encoding="utf-8") as f:
-            data_json = json.load(f)
-        
-        logger.info(f"成功读取本地数据, 共 {len(data_json)} 条记录")
-        for item in data_json:
-            yield item
-
-        logger.info("成功获取所有交易所品种数据")
-    except Exception as e:
-        logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
-        raise
-
-
-# @lru_cache()
-def __fetch_exchange_symbol_raw_em_bak() -> iter:
     """
     东方财富网-期货行情-交易所品种对照表原始数据
     https://quote.eastmoney.com/qihuo/al2505.html
@@ -106,6 +82,31 @@ def __fetch_exchange_symbol_raw_em_bak() -> iter:
         logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
         raise
 
+
+# @lru_cache()
+def __fetch_exchange_symbol_raw_em_bak() -> iter:
+    """
+    东方财富网-期货行情-交易所品种对照表原始数据
+    https://quote.eastmoney.com/qihuo/al2505.html
+    :return: 交易所品种对照表原始数据
+    :rtype: iter
+    """
+    logger.info("开始获取交易所品种原始数据")
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), "__fetch_exchange_symbol_raw_em.json")
+        with open(file_path, "r", encoding="utf-8") as f:
+            data_json = json.load(f)
+        
+        logger.info(f"成功读取本地数据, 共 {len(data_json)} 条记录")
+        for item in data_json:
+            yield item
+
+        logger.info("成功获取所有交易所品种数据")
+    except Exception as e:
+        logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
+        raise
+    
+
 @lru_cache()
 def __get_exchange_symbol_map() -> Tuple[Dict, Dict, Dict, Dict]:
     """
@@ -116,7 +117,7 @@ def __get_exchange_symbol_map() -> Tuple[Dict, Dict, Dict, Dict]:
     """
     logger.info("开始构建交易所品种映射")
     try:
-        all_exchange_symbol_list = __fetch_exchange_symbol_raw_em()
+        all_exchange_symbol_list = __fetch_exchange_symbol_raw_em_bak()
         c_contract_mkt = {}
         c_contract_to_e_contract = {}
         e_symbol_mkt = {}
