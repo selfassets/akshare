@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 import pandas as pd
 
 from akshare import futures_fees_info
-from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em
+from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em
 from akshare.futures.futures_inventory_99 import futures_inventory_99
 from akshare.futures.futures_comm_qihuo import futures_comm_info
 
@@ -98,7 +98,7 @@ async def get_futures_comm_info(
         "所有", "上海期货交易所", "大连商品交易所", "郑州商品交易所", "上海国际能源交易中心", "中国金融期货交易所", "广州期货交易所"
     ] = Query(
         "所有",
-        description='choice of {"所有", "上海期货交易所", "大连商品交易所", "郑州商品交易所", "上海国际能源交易中心", "中国金融期货交易所", "广州期货交易所"}',
+        description="交易所范围: '所有', '上海期货交易所', '大连商品交易所', '郑州商品交易所', '上海国际能源交易中心', '中国金融期货交易所', '广州期货交易所'",
     ),
 ):
     """
@@ -115,3 +115,10 @@ async def get_futures_hist_table_em():
     return _handle_api_request(futures_hist_table_em)
 
 
+
+@router.get("/futures_exchange_symbol_raw_em", response_model=List[Dict[str, Any]])
+async def get_futures_exchange_symbol_raw_em():
+    """
+    获取东方财富网-期货行情-交易所品种对照表原始数据
+    """
+    return _handle_api_request(lambda: pd.DataFrame(fetch_exchange_symbol_raw_em()))

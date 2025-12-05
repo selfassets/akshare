@@ -38,12 +38,12 @@ def __futures_hist_separate_char_and_numbers_em(symbol: str = "焦煤2506") -> t
 
 
 @lru_cache()
-def __fetch_exchange_symbol_raw_em() -> iter:
+def __fetch_exchange_symbol_raw_em() -> list:
     """
     东方财富网-期货行情-交易所品种对照表原始数据
     https://quote.eastmoney.com/qihuo/al2505.html
     :return: 交易所品种对照表原始数据
-    :rtype: iter
+    :rtype: list
     """
     logger.info("开始获取交易所品种原始数据")
     url = "https://futsse-static.eastmoney.com/redis"
@@ -55,6 +55,7 @@ def __fetch_exchange_symbol_raw_em() -> iter:
         data_json = r.json()
         logger.info(f"成功获取主品种数据, 共 {len(data_json)} 个市场")
 
+        temp_list = []
         for idx, item in enumerate(data_json):
             market_id = item["mktid"]
             logger.debug(f"处理市场 {idx + 1}/{len(data_json)}, 市场ID: {market_id}")
@@ -71,10 +72,11 @@ def __fetch_exchange_symbol_raw_em() -> iter:
                 r.raise_for_status()
                 inner_data_json = r.json()
                 for inner_item in inner_data_json:
-                    yield inner_item
+                    temp_list.append(inner_item)
                 logger.debug(f"市场 {market_id} 第 {num} 组: 获得 {len(inner_data_json)} 条记录")
 
         logger.info("成功获取所有交易所品种数据")
+        return temp_list
     except requests.exceptions.RequestException as e:
         logger.error(f"请求失败: {e}", exc_info=True)
         raise
