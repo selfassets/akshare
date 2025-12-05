@@ -2,6 +2,7 @@ import logging
 import uvicorn
 import os
 from fastapi import FastAPI,Request
+from fastapi.middleware.cors import CORSMiddleware
 from akshare.api.routers import futures
 
 # 获取日志级别，默认为 INFO
@@ -18,6 +19,15 @@ app = FastAPI(
     title="AKShare API",
     description="AKShare HTTP API interface",
     version="0.0.1",
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
 app.include_router(futures.router, prefix="/futures", tags=["futures"])
