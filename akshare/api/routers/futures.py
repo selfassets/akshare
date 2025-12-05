@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 import pandas as pd
 
 from akshare import futures_fees_info
-from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em, fetch_futures_market_info_em, fetch_futures_market_details_em
+from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em, fetch_futures_market_info_em, fetch_futures_market_details_em, futures_hist_em_v1
 from akshare.futures.futures_inventory_99 import futures_inventory_99
 from akshare.futures.futures_comm_qihuo import futures_comm_info
 
@@ -140,3 +140,24 @@ async def get_futures_market_details_em(
     获取东方财富网-期货行情-市场详情
     """
     return _handle_api_request(lambda: pd.DataFrame(fetch_futures_market_details_em(market_id=market_id)))
+
+
+@router.get("/futures_hist_em_v1", response_model=List[Dict[str, Any]])
+async def get_futures_hist_em_v1(
+    symbol: str = Query("热卷主连", description="期货代码"),
+    period: Literal["daily", "weekly", "monthly"] = Query("daily", description="周期: daily, weekly, monthly"),
+    start_date: str = Query("19900101", description="开始日期 YYYYMMDD"),
+    end_date: str = Query("20500101", description="结束日期 YYYYMMDD"),
+    sec_id: str = Query("20500101", description="sec_id"),
+):
+    """
+    获取东方财富网-期货行情-行情数据 v1
+    """
+    return _handle_api_request(
+        futures_hist_em_v1,
+        symbol=symbol,
+        period=period,
+        start_date=start_date,
+        end_date=end_date,
+        sec_id=sec_id
+    )

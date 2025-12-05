@@ -378,6 +378,137 @@ def futures_hist_em(
     except Exception as e:
         logger.error(f"获取期货行情数据出错 - 品种: {symbol}, 错误: {e}", exc_info=True)
         raise
+def futures_hist_em_v1(
+    symbol: str = "热卷主连",
+    period: str = "daily",
+    start_date: str = "19900101",
+    end_date: str = "20500101",
+    sec_id: str = "20500101",
+) -> pd.DataFrame:
+    """
+    东方财富网-期货行情-行情数据
+    https://qhweb.eastmoney.com/quote
+    :param symbol: 期货代码
+    :type symbol: str
+    :param period: choice of {'daily', 'weekly', 'monthly'}
+    :type period: str
+    :param start_date: 开始日期
+    :type start_date: str
+    :param end_date: 结束日期
+    :type end_date: str
+    :return: 行情数据
+    :rtype: pandas.DataFrame
+    """
+    logger.info(f"开始获取期货行情数据 - 品种: {symbol}, 周期: {period}, 日期范围: {start_date}~{end_date}")
+
+    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    period_dict = {"daily": "101", "weekly": "102", "monthly": "103"}
+
+    # try:
+    #     sec_id = f"{c_contract_mkt[symbol]}.{c_contract_to_e_contract[symbol]}"
+    #     logger.debug(f"从映射表获取 sec_id: {sec_id}")
+    # except KeyError:
+    #     logger.debug(f"未在映射表中找到 {symbol}, 尝试解析符号")
+    #     symbol_char, numbers = __futures_hist_separate_char_and_numbers_em(symbol)
+    #     if re.match(pattern="^[\u4e00-\u9fa5]+$", string=symbol_char):
+    #         sec_id = str(c_symbol_mkt[symbol_char]) + "." + symbol
+    #         logger.debug(f"使用中文符号映射获取 sec_id: {sec_id}")
+    #     else:
+    #         sec_id = str(e_symbol_mkt[symbol_char]) + "." + symbol
+    #         logger.debug(f"使用英文符号映射获取 sec_id: {sec_id}")
+
+    params = {
+        "secid": sec_id,
+        "klt": period_dict[period],
+        "fqt": "1",
+        "lmt": "10000",
+        "end": "20500000",
+        "iscca": "1",
+        "fields1": "f1,f2,f3,f4,f5,f6,f7,f8",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64",
+        "ut": "7eea3edcaed734bea9cbfc24409ed989",
+        "forcect": "1",
+    }
+
+    logger.debug(f"向服务器发送请求 URL: {url}")
+    r = requests.get(url, timeout=15, params=params)
+    r.raise_for_status()
+    logger.debug("服务器请求成功")
+
+    data_json = r.json()
+    if not data_json.get("data") or not data_json["data"].get("klines"):
+        logger.warning(f"未获取到 {symbol} 的行情数据")
+        return pd.DataFrame()
+
+    logger.info(f"成功获取 {len(data_json['data']['klines'])} 条原始行情数据")
+
+    temp_df = pd.DataFrame([item.split(",") for item in data_json["data"]["klines"]])
+    if temp_df.empty:
+        logger.warning("数据转换后为空")
+        return temp_df
+
+    logger.debug(f"原始数据形状: {temp_df.shape}")
+
+    temp_df.columns = [
+        "时间",
+        "开盘",
+        "收盘",
+        "最高",
+        "最低",
+        "成交量",
+        "成交额",
+        "-",
+        "涨跌幅",
+        "涨跌",
+        "_",
+        "_",
+        "持仓量",
+        "_",
+    ]
+    temp_df = temp_df[
+        [
+            "时间",
+            "开盘",
+            "最高",
+            "最低",
+            "收盘",
+            "涨跌",
+            "涨跌幅",
+            "成交量",
+            "成交额",
+            "持仓量",
+        ]
+    ]
+    logger.debug("列选择完成")
+
+    temp_df.index = pd.to_datetime(temp_df["时间"])
+    logger.debug(f"时间索引转换完成, 时间范围: {temp_df.index.min()} - {temp_df.index.max()}")
+
+    logger.debug(f"按日期范围过滤: {start_date} 到 {end_date}")
+    temp_df = temp_df[start_date:end_date]
+    logger.info(f"过滤后数据行数: {len(temp_df)}")
+
+    temp_df.reset_index(drop=True, inplace=True)
+
+    logger.debug("开始数据类型转换")
+    temp_df["开盘"] = pd.to_numeric(temp_df["开盘"], errors="coerce")
+    temp_df["收盘"] = pd.to_numeric(temp_df["收盘"], errors="coerce")
+    temp_df["最高"] = pd.to_numeric(temp_df["最高"], errors="coerce")
+    temp_df["最低"] = pd.to_numeric(temp_df["最低"], errors="coerce")
+    temp_df["成交量"] = pd.to_numeric(temp_df["成交量"], errors="coerce")
+    temp_df["成交额"] = pd.to_numeric(temp_df["成交额"], errors="coerce")
+    temp_df["涨跌"] = pd.to_numeric(temp_df["涨跌"], errors="coerce")
+    temp_df["涨跌幅"] = pd.to_numeric(temp_df["涨跌幅"], errors="coerce")
+    temp_df["持仓量"] = pd.to_numeric(temp_df["持仓量"], errors="coerce")
+    temp_df["时间"] = pd.to_datetime(temp_df["时间"], errors="coerce").dt.date
+    logger.debug("数据类型转换完成")
+
+    logger.info(f"期货行情数据获取成功, 最终数据形状: {temp_df.shape}")
+    logger.debug(f"数据摘要:\n{temp_df.head().to_string()}")
+
+    return temp_df
+    
+
 
 
 if __name__ == "__main__":
