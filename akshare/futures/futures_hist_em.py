@@ -379,7 +379,6 @@ def futures_hist_em(
         logger.error(f"获取期货行情数据出错 - 品种: {symbol}, 错误: {e}", exc_info=True)
         raise
 def futures_hist_em_v1(
-    symbol: str = "热卷主连",
     period: str = "daily",
     start_date: str = "19900101",
     end_date: str = "20500101",

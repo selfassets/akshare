@@ -144,7 +144,6 @@ async def get_futures_market_details_em(
 
 @router.get("/futures_hist_em_v1", response_model=List[Dict[str, Any]])
 async def get_futures_hist_em_v1(
-    symbol: str = Query("热卷主连", description="期货代码"),
     period: Literal["daily", "weekly", "monthly"] = Query("daily", description="周期: daily, weekly, monthly"),
     start_date: str = Query("19900101", description="开始日期 YYYYMMDD"),
     end_date: str = Query("20500101", description="结束日期 YYYYMMDD"),
