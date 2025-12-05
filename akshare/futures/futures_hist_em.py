@@ -398,7 +398,7 @@ def futures_hist_em_v1(
     :return: 行情数据
     :rtype: pandas.DataFrame
     """
-    logger.info(f"开始获取期货行情数据 - 品种: {symbol}, 周期: {period}, 日期范围: {start_date}~{end_date}")
+    logger.info(f"开始获取期货行情数据 - 品种: {sec_id}, 周期: {period}, 日期范围: {start_date}~{end_date}")
 
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
     period_dict = {"daily": "101", "weekly": "102", "monthly": "103"}
