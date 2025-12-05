@@ -38,6 +38,71 @@ def __futures_hist_separate_char_and_numbers_em(symbol: str = "焦煤2506") -> t
 
 
 @lru_cache()
+def fetch_futures_market_info_em() -> list:
+    """
+    东方财富网-期货行情-市场信息
+    https://quote.eastmoney.com/qihuo/al2505.html
+    :return: 市场信息
+    :rtype: list
+    """
+    logger.info("开始获取市场信息")
+    url = "https://futsse-static.eastmoney.com/redis"
+    params = {"msgid": "gnweb"}
+    try:
+        logger.debug(f"请求主品种数据, URL: {url}")
+        r = requests.get(url, params=params)
+        r.raise_for_status()
+        data_json = r.json()
+        logger.info(f"成功获取主品种数据, 共 {len(data_json)} 个市场")
+        return data_json
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {e}", exc_info=True)
+        raise
+    except Exception as e:
+        logger.error(f"获取市场信息出错: {e}", exc_info=True)
+        raise
+
+
+@lru_cache()
+def fetch_futures_market_details_em(market_id: str = "113") -> list:
+    """
+    东方财富网-期货行情-市场详情
+    https://quote.eastmoney.com/qihuo/al2505.html
+    :param market_id: 市场 ID
+    :type market_id: str
+    :return: 市场详情
+    :rtype: list
+    """
+    logger.info(f"开始获取市场 {market_id} 详情")
+    url = "https://futsse-static.eastmoney.com/redis"
+    try:
+        params = {"msgid": str(market_id)}
+        logger.debug(f"请求市场 {market_id} 第一页数据, URL: {url}")
+        r = requests.get(url, params=params)
+        r.raise_for_status()
+        inner_data_json = r.json()
+        logger.debug(f"市场 {market_id} 获得 {len(inner_data_json)} 组数据")
+
+        temp_list = []
+        for num in range(1, len(inner_data_json) + 1):
+            params = {"msgid": str(market_id) + f"_{num}"}
+            r = requests.get(url, params=params)
+            r.raise_for_status()
+            inner_data_json = r.json()
+            for inner_item in inner_data_json:
+                temp_list.append(inner_item)
+            logger.debug(f"市场 {market_id} 第 {num} 组: 获得 {len(inner_data_json)} 条记录")
+        
+        return temp_list
+    except requests.exceptions.RequestException as e:
+        logger.error(f"请求失败: {e}", exc_info=True)
+        raise
+    except Exception as e:
+        logger.error(f"获取市场详情出错: {e}", exc_info=True)
+        raise
+
+
+@lru_cache()
 def __fetch_exchange_symbol_raw_em() -> list:
     """
     东方财富网-期货行情-交易所品种对照表原始数据
@@ -83,6 +148,7 @@ def __fetch_exchange_symbol_raw_em() -> list:
     except Exception as e:
         logger.error(f"获取交易所品种原始数据出错: {e}", exc_info=True)
         raise
+
 
 
 # @lru_cache()

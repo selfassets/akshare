@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 import pandas as pd
 
 from akshare import futures_fees_info
-from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em
+from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em, fetch_futures_market_info_em, fetch_futures_market_details_em
 from akshare.futures.futures_inventory_99 import futures_inventory_99
 from akshare.futures.futures_comm_qihuo import futures_comm_info
 
@@ -122,3 +122,21 @@ async def get_futures_exchange_symbol_raw_em():
     获取东方财富网-期货行情-交易所品种对照表原始数据
     """
     return _handle_api_request(lambda: pd.DataFrame(fetch_exchange_symbol_raw_em()))
+
+
+@router.get("/futures_market_info_em", response_model=List[Dict[str, Any]])
+async def get_futures_market_info_em():
+    """
+    获取东方财富网-期货行情-市场信息
+    """
+    return _handle_api_request(lambda: pd.DataFrame(fetch_futures_market_info_em()))
+
+
+@router.get("/futures_market_details_em", response_model=List[Dict[str, Any]])
+async def get_futures_market_details_em(
+    market_id: str = Query("113", description="市场 ID"),
+):
+    """
+    获取东方财富网-期货行情-市场详情
+    """
+    return _handle_api_request(lambda: pd.DataFrame(fetch_futures_market_details_em(market_id=market_id)))
