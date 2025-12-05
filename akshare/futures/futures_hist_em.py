@@ -436,7 +436,7 @@ def futures_hist_em_v1(
 
     data_json = r.json()
     if not data_json.get("data") or not data_json["data"].get("klines"):
-        logger.warning(f"未获取到 {symbol} 的行情数据")
+        logger.warning(f"未获取到 {sec_id} 的行情数据")
         return pd.DataFrame()
 
     logger.info(f"成功获取 {len(data_json['data']['klines'])} 条原始行情数据")
