@@ -154,7 +154,6 @@ async def get_futures_hist_em_v1(
     """
     return _handle_api_request(
         futures_hist_em_v1,
-        symbol=symbol,
         period=period,
         start_date=start_date,
         end_date=end_date,
