@@ -1,0 +1,40 @@
+### 获取大连商品交易所的品种代码
+GET http://localhost:8000/open/future?action=subscribe_exchange&symbol=dce
+Content-Type: application/json
+
+### 获取郑州商品交易所的品种代码
+GET http://localhost:8000/open/future?action=subscribe_exchange&symbol=czce
+Content-Type: application/json
+
+### 获取上海期货交易所的品种代码
+GET http://localhost:8000/open/future?action=subscribe_exchange&symbol=shfe
+Content-Type: application/json
+
+### 获取中国金融期货交易所的品种代码
+GET http://localhost:8000/open/future?action=subscribe_exchange&symbol=cffex
+Content-Type: application/json
+
+### 获取广州期货交易所的品种代码
+GET http://localhost:8000/open/future?action=subscribe_exchange&symbol=gfex
+Content-Type: application/json
+
+
+### 获取上海期货交易所的主力合约
+GET http://localhost:8000/open/future?action=match_main_contract&symbol=shfe
+Content-Type: application/json
+
+### 获取大连商品交易所的主力合约
+GET http://localhost:8000/open/future?action=match_main_contract&symbol=dce
+Content-Type: application/json
+
+### 获取郑州商品交易所的主力合约
+GET http://localhost:8000/open/future?action=match_main_contract&symbol=czce
+Content-Type: application/json
+
+### 获取中国金融期货交易所的主力合约
+GET http://localhost:8000/open/future?action=match_main_contract&symbol=cffex
+Content-Type: application/json
+
+### 获取广州期货交易所的主力合约
+GET http://localhost:8000/open/future?action=match_main_contract&symbol=gfex
+Content-Type: application/json
