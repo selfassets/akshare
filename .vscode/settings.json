@@ -1,0 +1,6 @@
+{
+  // Python 解释器配置
+  "python.defaultInterpreterPath": "/Users/dwx/.pyenv/versions/3.12.12/bin/python",
+
+  "python.analysis.extraPaths": ["${workspaceFolder}"]
+}
