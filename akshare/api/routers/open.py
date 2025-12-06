@@ -1,9 +1,13 @@
 from typing import Optional, List, Dict, Any, Literal, Callable
 import logging
 import requests
+import json
+import urllib.parse
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Request, status
+from fastapi.responses import JSONResponse
 import pandas as pd
+import akshare as ak
 
 from akshare import futures_fees_info
 from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em, fetch_futures_market_info_em, fetch_futures_market_details_em, futures_hist_em_v1
