@@ -136,6 +136,56 @@ def futures_zh_realtime(symbol: str = "PTA") -> pd.DataFrame:
     return temp_df
 
 
+
+def futures_zh_realtime_v1(node: str = "pta_qh") -> pd.DataFrame:
+    """
+    期货品种当前时刻所有可交易的合约实时数据 (v1版本 - 直接使用node参数)
+    https://vip.stock.finance.sina.com.cn/quotes_service/view/qihuohangqing.html#titlePos_1
+    :param node: 品种名称；可以通过 ak.futures_symbol_mark() 获取所有品种命名表
+    :type node: str
+    :return: 期货品种当前时刻所有可交易的合约实时数据
+    :rtype: pandas.DataFrame
+    """
+    # _futures_symbol_mark_df = futures_symbol_mark()
+    # symbol_mark_map = dict(
+    #     zip(_futures_symbol_mark_df["symbol"], _futures_symbol_mark_df["mark"])
+    # )
+    url = "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQFuturesData"
+    params = {
+        "page": "1",
+        "sort": "position",
+        "asc": "0",
+        "node": node,
+        "base": "futures",
+    }
+    r = requests.get(url, params=params)
+    data_json = r.json()
+    temp_df = pd.DataFrame(data_json)
+
+    temp_df["trade"] = pd.to_numeric(temp_df["trade"], errors="coerce")
+    temp_df["settlement"] = pd.to_numeric(temp_df["settlement"], errors="coerce")
+    temp_df["presettlement"] = pd.to_numeric(temp_df["presettlement"], errors="coerce")
+    temp_df["open"] = pd.to_numeric(temp_df["open"], errors="coerce")
+    temp_df["high"] = pd.to_numeric(temp_df["high"], errors="coerce")
+    temp_df["low"] = pd.to_numeric(temp_df["low"], errors="coerce")
+    temp_df["close"] = pd.to_numeric(temp_df["close"], errors="coerce")
+    temp_df["bidprice1"] = pd.to_numeric(temp_df["bidprice1"], errors="coerce")
+    temp_df["askprice1"] = pd.to_numeric(temp_df["askprice1"], errors="coerce")
+    temp_df["bidvol1"] = pd.to_numeric(temp_df["bidvol1"], errors="coerce")
+    temp_df["askvol1"] = pd.to_numeric(temp_df["askvol1"], errors="coerce")
+    temp_df["volume"] = pd.to_numeric(temp_df["volume"], errors="coerce")
+    temp_df["position"] = pd.to_numeric(temp_df["position"], errors="coerce")
+    temp_df["preclose"] = pd.to_numeric(temp_df["preclose"], errors="coerce")
+    temp_df["changepercent"] = pd.to_numeric(temp_df["changepercent"], errors="coerce")
+    temp_df["bid"] = pd.to_numeric(temp_df["bid"], errors="coerce")
+    temp_df["ask"] = pd.to_numeric(temp_df["ask"], errors="coerce")
+    temp_df["prevsettlement"] = pd.to_numeric(
+        temp_df["prevsettlement"], errors="coerce"
+    )
+    return temp_df
+
+
+
 def zh_subscribe_exchange_symbol(symbol: str = "cffex") -> pd.DataFrame:
     """
     交易所具体的可交易品种
