@@ -9,6 +9,8 @@ from akshare import futures_fees_info
 from akshare.futures.futures_hist_em import futures_hist_em, futures_hist_table_em, __fetch_exchange_symbol_raw_em as fetch_exchange_symbol_raw_em, fetch_futures_market_info_em, fetch_futures_market_details_em, futures_hist_em_v1
 from akshare.futures.futures_inventory_99 import futures_inventory_99
 from akshare.futures.futures_comm_qihuo import futures_comm_info
+from akshare.futures_derivative.futures_index_sina import futures_display_main_sina
+from akshare.futures.futures_zh_sina import futures_zh_daily_sina
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -160,3 +162,25 @@ async def get_futures_hist_em_v1(
         end_date=end_date,
         sec_id=sec_id
     )
+
+
+@router.get("/futures_display_main_sina", response_model=List[Dict[str, Any]])
+async def get_futures_display_main_sina():
+    """
+    获取新浪财经-主力连续合约品种一览表
+    
+    返回新浪财经主力连续合约品种信息，包括:
+    - 所有交易所(dce, czce, shfe, cffex, gfex)的主力连续合约品种
+    """
+    return _handle_api_request(futures_display_main_sina)
+
+
+@router.get("/futures_zh_daily_sina", response_model=List[Dict[str, Any]])
+async def get_futures_zh_daily_sina(
+    symbol: str = Query("RB0", description="期货代码, 可以通过 futures_display_main_sina 获取"),
+):
+    """
+    获取中国各品种期货日频率数据 (新浪财经)
+    """
+    return _handle_api_request(futures_zh_daily_sina, symbol=symbol)
+
