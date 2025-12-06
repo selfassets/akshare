@@ -142,6 +142,7 @@ async def get_futures_market_details_em(
     return _handle_api_request(lambda: pd.DataFrame(fetch_futures_market_details_em(market_id=market_id)))
 
 
+
 @router.get("/futures_hist_em_v1", response_model=List[Dict[str, Any]])
 async def get_futures_hist_em_v1(
     period: Literal["daily", "weekly", "monthly"] = Query("daily", description="周期: daily, weekly, monthly"),
