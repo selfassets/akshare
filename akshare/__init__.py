@@ -4825,6 +4825,7 @@ from akshare.futures.futures_zh_sina import (
     futures_zh_minute_sina,
     futures_zh_daily_sina,
     futures_zh_realtime,
+    futures_zh_realtime_v1,
     futures_symbol_mark,
     match_main_contract,
     futures_zh_spot,
