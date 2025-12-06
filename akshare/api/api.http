@@ -98,14 +98,18 @@ Content-Type: application/json
 GET http://localhost:8000/open/api/futures_symbol_mark
 Content-Type: application/json
 
-### 示例15: 获取期货实时数据 v1版本 - 默认品种
+### 示例15: 获取期货实时数据 v1版本 - 默认品种(pta_qh)
 GET http://localhost:8000/open/api/futures_zh_realtime_v1
 Content-Type: application/json
 
 ### 示例16: 获取期货实时数据 v1版本 - PTA品种
-GET http://localhost:8000/open/api/futures_zh_realtime_v1?symbol=PTA
+GET http://localhost:8000/open/api/futures_zh_realtime_v1?node=pta_qh
 Content-Type: application/json
 
-### 示例17: 获取期货实时数据 v1版本 - 螺纹钢品种
-GET http://localhost:8000/open/api/futures_zh_realtime_v1?symbol=螺纹钢
+### 示例17: 获取期货实时数据 v1版本 - 螺纹钢品种  
+GET http://localhost:8000/open/api/futures_zh_realtime_v1?node=lw_qh
+Content-Type: application/json
+
+### 示例18: 获取期货实时数据 v1版本 - 工业硅品种
+GET http://localhost:8000/open/api/futures_zh_realtime_v1?node=si_qh
 Content-Type: application/json
