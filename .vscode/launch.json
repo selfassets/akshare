@@ -8,7 +8,6 @@
       "program": "${file}",
       "console": "integratedTerminal",
       "justMyCode": false,
-      "pythonPath": "/Users/dwx/.pyenv/versions/3.12.12/bin/python",
       "env": { "PYTHONPATH": "${workspaceFolder}" }
     },
     {
