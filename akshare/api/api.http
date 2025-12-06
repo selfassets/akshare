@@ -38,3 +38,26 @@ Content-Type: application/json
 ### 获取广州期货交易所的主力合约
 GET http://localhost:8000/open/future?action=match_main_contract&symbol=gfex
 Content-Type: application/json
+
+
+### ==================== 通用 API 接口示例 ====================
+
+### 示例1: 无参数调用 - 获取期货交易费用信息
+GET http://localhost:8000/open/api/futures_fees_info
+Content-Type: application/json
+
+### 示例2: 带参数调用 - 获取新浪期货日数据
+GET http://localhost:8000/open/api/futures_zh_daily_sina?symbol=RB0
+Content-Type: application/json
+
+### 示例3: 带多个参数 - 获取期货历史数据
+GET http://localhost:8000/open/api/futures_hist_em?symbol=热卷主连&period=daily&start_date=20240101&end_date=20241231
+Content-Type: application/json
+
+### 示例4: 获取主力连续合约品种一览表
+GET http://localhost:8000/open/api/futures_display_main_sina
+Content-Type: application/json
+
+### 示例5: 获取指定交易所库存数据
+GET http://localhost:8000/open/api/futures_inventory_99?symbol=豆一
+Content-Type: application/json
