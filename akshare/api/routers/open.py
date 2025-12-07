@@ -276,4 +276,3 @@ async def root(request: Request, item_id: str):
         logger.info(f"获取到 {item_id} 的数据")
         return JSONResponse(status_code=status.HTTP_200_OK, content=json.loads(temp_df))
 
-
