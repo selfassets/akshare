@@ -10,7 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, Response
 import pandas as pd
 
-from akshare.futures.futures_zh_sina import futures_zh_daily_sina
+from akshare.futures_derivative.futures_index_sina import futures_main_sina
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ async def analyze_chanlun(
         # 1. 直接调用 akshare 库获取 K 线数据
         # 使用 futures_zh_daily_sina 获取新浪期货数据
         try:
-            df = futures_zh_daily_sina(symbol=symbol)
+            df = futures_main_sina(symbol=symbol, start_date=start_date, end_date=end_date)
             logger.info(f"获取到 {len(df)} 条数据，列名: {df.columns.tolist()}")
         except Exception as e:
             logger.error(f"获取 K 线数据失败: {e}", exc_info=True)
