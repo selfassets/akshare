@@ -3,7 +3,7 @@ import uvicorn
 import os
 from fastapi import FastAPI,Request
 from fastapi.middleware.cors import CORSMiddleware
-from akshare.api.routers import futures,open,czsc,chanlun
+from akshare.api.routers import futures,open,chanlun
 
 # 获取日志级别，默认为 INFO
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -32,7 +32,7 @@ app.add_middleware(
 
 app.include_router(futures.router, prefix="/futures", tags=["futures"])
 app.include_router(open.router, prefix="/open", tags=["open"])
-app.include_router(czsc.router, prefix="/czsc", tags=["czsc"])
+
 app.include_router(chanlun.router, prefix="/chanlun", tags=["chanlun"])
 
 @app.get("/")
@@ -45,7 +45,6 @@ async def root(request: Request):
         "documentation": "/docs",
         "endpoints": [
             "/futures",
-            "/czsc",
             "/chanlun"
         ]
     }
