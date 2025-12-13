@@ -198,6 +198,39 @@ async def get_strokes(
     }
 
 
+@router.get("/results", response_model=Dict[str, Any])
+async def get_results(
+    symbol: str = Query("eg2601", description="期货代码"),
+    start_date: str = Query("20250101", description="开始日期 YYYYMMDD"),
+    end_date: str = Query("20261231", description="结束日期 YYYYMMDD"),
+):
+    """
+    只返回缠论分析的核心结果（不包含K线数据）
+    
+    返回数据包括:
+    - fractals: 分型列表
+    - strokes: 笔列表
+    - segments: 线段列表
+    - pivots: 中枢列表
+    - trade_points: 买卖点列表
+    
+    示例:
+    ```
+    GET /chanlun/results?symbol=eg2601&start_date=20250101&end_date=20261231
+    ```
+    """
+    result = await analyze_chanlun(symbol, start_date, end_date, "full")
+    return {
+        "fractals": result["fractals"],
+        "strokes": result["strokes"],
+        "segments": result["segments"],
+        "pivots": result["pivots"],
+        "trade_points": result["trade_points"],
+        "stats": result["stats"],
+    }
+
+
+
 @router.get("/health", response_model=Dict[str, str])
 async def health_check():
     """
