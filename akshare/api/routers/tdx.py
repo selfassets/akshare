@@ -127,6 +127,17 @@ class TdxConnectionManager:
                 except Exception as e:
                     logger.error(f"断开扩展行情连接失败: {e}")
                 self._exhq_api = None
+    
+    def __del__(self):
+        """析构器 - 对象被销毁时尝试断开连接（最后保障）"""
+        try:
+            # 不使用日志，因为此时日志系统可能已关闭
+            if self._hq_api:
+                self._hq_api.disconnect()
+            if self._exhq_api:
+                self._exhq_api.disconnect()
+        except Exception:
+            pass  # 忽略所有异常，因为此时可能已经在解释器关闭阶段
 
 
 # 全局连接管理器实例
