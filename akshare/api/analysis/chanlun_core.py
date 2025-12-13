@@ -466,106 +466,258 @@ class ChanlunAnalyzer:
     
     def _identify_strokes(self):
         """
-        识别笔
+        识别笔（符合 czsc 标准实现）
         
         笔的定义：
         - 由顶分型和底分型交替构成
-        - 相邻两个分型之间至少有一根独立K线（处理包含关系后）
+        - 相邻两个分型之间至少有4根无包含关系的K线（czsc 标准）
         - 向上笔：底分型 -> 顶分型，且顶分型高点 > 底分型高点
         - 向下笔：顶分型 -> 底分型，且底分型低点 < 顶分型低点
         
-        使用更宽松的规则确保能识别出更多笔
+        实现步骤（参考 czsc 官方 Wiki）：
+        1. 分型过滤：要求相邻分型间至少有4根无包含关系的K线
+        2. 同类分型合并：对连续的同类分型，顶分型取最高，底分型取最低
+        3. 交替配对：确保顶底分型交替出现，形成有效笔
         """
         if len(self.fractals) < 2:
             return
         
+        # 步骤1：过滤分型，保留符合K线间隔要求的分型
+        filtered_fractals = self._filter_fractals_by_bar_count()
+        
+        if len(filtered_fractals) < 2:
+            self.strokes = []
+            return
+        
+        # 步骤2：对同类分型进行窗口过滤（取极值）
+        filtered_fractals = self._filter_same_type_fractals(filtered_fractals)
+        
+        if len(filtered_fractals) < 2:
+            self.strokes = []
+            return
+        
+        # 步骤3：合并连续同类分型，确保顶底交替
+        alternating_fractals = self._merge_consecutive_same_type(filtered_fractals)
+        
+        if len(alternating_fractals) < 2:
+            self.strokes = []
+            return
+        
+        # 步骤4：生成笔
         strokes = []
-        
-        # 找到第一个有效的分型作为起点
-        current_start = self._find_first_valid_start()
-        if current_start is None:
-            # 如果找不到有效起点，使用第一个分型
-            current_start = self.fractals[0]
-        
-        # 记录当前分型索引
-        current_start_idx = self.fractals.index(current_start)
-        i = current_start_idx + 1
-        
-        while i < len(self.fractals):
-            candidate_end = self.fractals[i]
+        for i in range(len(alternating_fractals) - 1):
+            start_fractal = alternating_fractals[i]
+            end_fractal = alternating_fractals[i + 1]
             
-            # 必须是不同类型的分型
-            if candidate_end.fractal_type == current_start.fractal_type:
-                # 同类型：更新起始分型为更极端的那个（但只有在还没形成任何笔时才更新）
-                if current_start.fractal_type == FractalType.TOP:
-                    if candidate_end.high > current_start.high:
-                        current_start = candidate_end
-                        current_start_idx = i
-                else:
-                    if candidate_end.low < current_start.low:
-                        current_start = candidate_end
-                        current_start_idx = i
-                i += 1
+            # 验证分型类型不同
+            if start_fractal.fractal_type == end_fractal.fractal_type:
                 continue
             
-            # 检查是否有足够的K线间隔（放宽到3根K线）
-            if not self._has_enough_bars_between(current_start, candidate_end):
-                i += 1
-                continue
-            
-            # 验证价格关系
-            valid_price = False
-            if current_start.fractal_type == FractalType.BOTTOM:
+            # 确定笔方向并验证价格关系
+            if start_fractal.fractal_type == FractalType.BOTTOM:
                 # 向上笔：终点高点必须高于起点高点
-                if candidate_end.high > current_start.high:
-                    valid_price = True
-                    direction = Direction.UP
+                if end_fractal.high <= start_fractal.high:
+                    continue
+                direction = Direction.UP
             else:
                 # 向下笔：终点低点必须低于起点低点
-                if candidate_end.low < current_start.low:
-                    valid_price = True
-                    direction = Direction.DOWN
+                if end_fractal.low >= start_fractal.low:
+                    continue
+                direction = Direction.DOWN
             
-            if not valid_price:
-                i += 1
-                continue
-            
-            # 向前看：是否有更好的结束分型？（在遇到不同类型分型之前）
-            best_end = candidate_end
-            best_end_idx = i
-            for j in range(i + 1, min(i + 10, len(self.fractals))):  # 限制向前看的范围
-                next_fractal = self.fractals[j]
-                if next_fractal.fractal_type != candidate_end.fractal_type:
-                    break  # 遇到不同类型，停止搜索
-                # 检查是否更极端
-                if direction == Direction.UP:
-                    if next_fractal.high > best_end.high:
-                        best_end = next_fractal
-                        best_end_idx = j
-                else:
-                    if next_fractal.low < best_end.low:
-                        best_end = next_fractal
-                        best_end_idx = j
-            
-            # 创建笔（包含 K 线索引用于 MACD 计算）
-            start_idx = self._get_bar_index(current_start.dt)
-            end_idx = self._get_bar_index(best_end.dt)
+            # 创建笔
+            start_idx = self._get_bar_index(start_fractal.dt)
+            end_idx = self._get_bar_index(end_fractal.dt)
             stroke = Stroke(
                 direction=direction,
-                start_fractal=current_start,
-                end_fractal=best_end,
+                start_fractal=start_fractal,
+                end_fractal=end_fractal,
                 index=len(strokes),
                 bar_start_idx=start_idx,
                 bar_end_idx=end_idx
             )
             strokes.append(stroke)
-            
-            # 以当前笔的结束分型作为下一笔的起始分型
-            current_start = best_end
-            current_start_idx = best_end_idx
-            i = best_end_idx + 1
         
         self.strokes = strokes
+    
+    def _filter_fractals_by_bar_count(self, min_bars: int = 4) -> List[Fractal]:
+        """
+        过滤分型：要求相邻分型间至少有指定数量的K线（czsc 标准为4根）
+        
+        使用滑动窗口（大小为2）检查相邻分型间的K线数量
+        
+        Args:
+            min_bars: 最小K线间隔数，默认4根（czsc 标准）
+        
+        Returns:
+            过滤后的分型列表
+        """
+        if len(self.fractals) < 2:
+            return self.fractals.copy()
+        
+        # 首先为每个分型计算其在 bars_merged 中的索引
+        fractal_bar_indices = {}
+        for fractal in self.fractals:
+            bar_idx = self._get_bar_index(fractal.dt)
+            if bar_idx >= 0:
+                fractal_bar_indices[fractal.index] = bar_idx
+            elif fractal.bars and len(fractal.bars) >= 2:
+                # 使用分型中间K线的索引
+                fractal_bar_indices[fractal.index] = fractal.bars[1].index
+        
+        filtered = []
+        i = 0
+        
+        while i < len(self.fractals):
+            current = self.fractals[i]
+            
+            # 如果是第一个分型，直接添加
+            if not filtered:
+                filtered.append(current)
+                i += 1
+                continue
+            
+            last = filtered[-1]
+            
+            # 获取两个分型的K线索引
+            last_bar_idx = fractal_bar_indices.get(last.index, -1)
+            current_bar_idx = fractal_bar_indices.get(current.index, -1)
+            
+            # 计算K线间隔
+            if last_bar_idx >= 0 and current_bar_idx >= 0:
+                bar_gap = abs(current_bar_idx - last_bar_idx)
+            else:
+                # 无法计算时使用分型索引差估算
+                bar_gap = abs(current.index - last.index) * 2
+            
+            # 检查是否满足K线间隔要求
+            if bar_gap >= min_bars:
+                filtered.append(current)
+            else:
+                # 不满足间隔要求时，根据分型类型决定保留哪个
+                if current.fractal_type == last.fractal_type:
+                    # 同类型：保留更极端的
+                    if current.fractal_type == FractalType.TOP:
+                        if current.high > last.high:
+                            filtered[-1] = current
+                    else:
+                        if current.low < last.low:
+                            filtered[-1] = current
+                # 不同类型且间隔不够：跳过当前分型
+            
+            i += 1
+        
+        return filtered
+    
+    def _filter_same_type_fractals(self, fractals: List[Fractal]) -> List[Fractal]:
+        """
+        对同类型分型序列进行窗口过滤（窗口大小为3）
+        
+        - 对于连续的顶分型序列：只保留中间最高的
+        - 对于连续的底分型序列：只保留中间最低的
+        
+        Args:
+            fractals: 输入分型列表
+        
+        Returns:
+            过滤后的分型列表
+        """
+        if len(fractals) < 3:
+            return fractals.copy()
+        
+        # 分离顶分型和底分型，分别处理
+        top_fractals = [f for f in fractals if f.fractal_type == FractalType.TOP]
+        bottom_fractals = [f for f in fractals if f.fractal_type == FractalType.BOTTOM]
+        
+        # 对顶分型使用窗口过滤（保留局部最高）
+        filtered_tops = self._window_filter_fractals(top_fractals, is_top=True)
+        
+        # 对底分型使用窗口过滤（保留局部最低）
+        filtered_bottoms = self._window_filter_fractals(bottom_fractals, is_top=False)
+        
+        # 合并并按时间排序
+        result = filtered_tops + filtered_bottoms
+        result.sort(key=lambda f: f.dt)
+        
+        return result
+    
+    def _window_filter_fractals(self, fractals: List[Fractal], is_top: bool, window_size: int = 3) -> List[Fractal]:
+        """
+        使用滑动窗口过滤分型
+        
+        Args:
+            fractals: 同类型分型列表
+            is_top: 是否为顶分型
+            window_size: 窗口大小，默认3
+        
+        Returns:
+            过滤后的分型列表
+        """
+        if len(fractals) <= window_size:
+            return fractals.copy()
+        
+        # 按时间排序
+        sorted_fractals = sorted(fractals, key=lambda f: f.dt)
+        
+        # 标记需要保留的分型
+        keep = [True] * len(sorted_fractals)
+        
+        for i in range(1, len(sorted_fractals) - 1):
+            prev_f = sorted_fractals[i - 1]
+            curr_f = sorted_fractals[i]
+            next_f = sorted_fractals[i + 1]
+            
+            if is_top:
+                # 顶分型：如果中间不是最高的，标记为不保留
+                if curr_f.high < prev_f.high or curr_f.high < next_f.high:
+                    # 检查是否是局部最高
+                    if not (curr_f.high >= prev_f.high and curr_f.high >= next_f.high):
+                        keep[i] = False
+            else:
+                # 底分型：如果中间不是最低的，标记为不保留
+                if curr_f.low > prev_f.low or curr_f.low > next_f.low:
+                    # 检查是否是局部最低
+                    if not (curr_f.low <= prev_f.low and curr_f.low <= next_f.low):
+                        keep[i] = False
+        
+        return [f for i, f in enumerate(sorted_fractals) if keep[i]]
+    
+    def _merge_consecutive_same_type(self, fractals: List[Fractal]) -> List[Fractal]:
+        """
+        合并连续的同类型分型，确保顶底交替出现
+        
+        对于连续的同类型分型：
+        - 顶分型：保留高点最高的
+        - 底分型：保留低点最低的
+        
+        Args:
+            fractals: 输入分型列表（已按时间排序）
+        
+        Returns:
+            合并后的分型列表，保证顶底交替
+        """
+        if len(fractals) < 2:
+            return fractals.copy()
+        
+        result = [fractals[0]]
+        
+        for i in range(1, len(fractals)):
+            current = fractals[i]
+            last = result[-1]
+            
+            if current.fractal_type == last.fractal_type:
+                # 同类型分型：保留更极端的
+                if current.fractal_type == FractalType.TOP:
+                    if current.high > last.high:
+                        result[-1] = current
+                else:
+                    if current.low < last.low:
+                        result[-1] = current
+            else:
+                # 不同类型：直接添加
+                result.append(current)
+        
+        return result
     
     def _find_first_valid_start(self) -> Optional[Fractal]:
         """
@@ -590,45 +742,38 @@ class ChanlunAnalyzer:
                     continue
         return self.fractals[0] if self.fractals else None
     
-    def _has_enough_bars_between(self, f1: Fractal, f2: Fractal) -> bool:
+    def _has_enough_bars_between(self, f1: Fractal, f2: Fractal, min_bars: int = 4) -> bool:
         """
-        检查两个分型之间是否有足够的K线
+        检查两个分型之间是否有足够的K线（czsc 标准要求至少4根）
         
-        标准：两个分型之间至少有1根独立K线（不被两个分型共用）
-        使用分型的索引来判断，放宽标准
+        标准：两个分型之间至少有 min_bars 根无包含关系的K线
+        
+        Args:
+            f1: 第一个分型
+            f2: 第二个分型
+            min_bars: 最小K线间隔数，默认4根（czsc 标准）
+        
+        Returns:
+            是否满足K线间隔要求
         """
-        # 使用分型的 index 属性来判断间隔
-        # 分型索引差 >= 1 表示不是连续的分型（放宽标准）
-        if abs(f2.index - f1.index) >= 1:
-            return True
-        
-        # 如果分型有关联的 bars，使用 bars 的 index 来判断
-        if f1.bars and f2.bars:
+        # 优先使用分型关联的 bars 来判断
+        if f1.bars and f2.bars and len(f1.bars) >= 2 and len(f2.bars) >= 2:
             # 取中间K线的索引（分型由3根K线组成，中间那根是分型位置）
-            f1_bar_index = f1.bars[1].index if len(f1.bars) >= 2 else f1.bars[0].index
-            f2_bar_index = f2.bars[1].index if len(f2.bars) >= 2 else f2.bars[0].index
-            # K线索引差 >= 3 表示有足够间隔
-            return abs(f2_bar_index - f1_bar_index) >= 3
+            f1_bar_index = f1.bars[1].index
+            f2_bar_index = f2.bars[1].index
+            # K线索引差需要 >= min_bars
+            return abs(f2_bar_index - f1_bar_index) >= min_bars
         
-        # 备用方案：通过日期查找
-        f1_dt = f1.dt
-        f2_dt = f2.dt
+        # 备用方案：通过日期查找K线索引
+        f1_index = self._get_bar_index(f1.dt)
+        f2_index = self._get_bar_index(f2.dt)
         
-        f1_index = -1
-        f2_index = -1
+        if f1_index >= 0 and f2_index >= 0:
+            return abs(f2_index - f1_index) >= min_bars
         
-        for idx, bar in enumerate(self.bars_merged):
-            if bar.dt == f1_dt:
-                f1_index = idx
-            if bar.dt == f2_dt:
-                f2_index = idx
-        
-        if f1_index == -1 or f2_index == -1:
-            # 如果找不到，默认返回True允许形成笔（放宽限制）
-            return True
-        
-        # 放宽标准：索引差 >= 3 表示有足够的间隔
-        return abs(f2_index - f1_index) >= 3
+        # 最后方案：使用分型索引估算（每个分型间隔约2-3根K线）
+        # 分型索引差 >= 2 表示大约有4根K线间隔
+        return abs(f2.index - f1.index) >= 2
     
     def _get_bar_index(self, dt: datetime) -> int:
         """
