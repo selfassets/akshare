@@ -99,6 +99,23 @@ async def root(request: Request):
     }
 
 
+@app.post("/shutdown")
+async def shutdown():
+    """优雅关闭服务端点 - 主要用于 Windows 环境"""
+    import asyncio
+    
+    logger.info("收到关闭请求，正在优雅关闭...")
+    cleanup()
+    
+    # 延迟关闭，让响应先返回
+    async def delayed_shutdown():
+        await asyncio.sleep(0.5)
+        os._exit(0)
+    
+    asyncio.create_task(delayed_shutdown())
+    return {"status": "shutting_down"}
+
+
 if __name__ == "__main__":
     logger.info(f"启动 AKShare API 服务器... Log Level: {LOG_LEVEL}")
     uvicorn.run(
