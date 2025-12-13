@@ -20,25 +20,93 @@ EXHQ_SERVERS = [
 
 def test_standard_hq():
     """测试标准行情接口"""
-    print("=" * 50)
+    print("=" * 60)
     print("测试标准行情接口 (TdxHq_API)")
-    print("=" * 50)
+    print("=" * 60)
     
     api = TdxHq_API()
     try:
         api.connect(HQ_SERVER_HOST, HQ_SERVER_PORT)
-        # 获取股票K线数据 (上证指数)
-        data = api.get_security_bars(
-            category=9,      # K线类型: 9=日线
+        
+        # 1. 获取股票行情
+        print("\n[1] 获取股票行情 (get_security_quotes):")
+        quotes = api.get_security_quotes([(0, "000001"), (1, "600000")])
+        print(api.to_df(quotes) if quotes else "无数据")
+        
+        # 2. 获取K线数据
+        print("\n[2] 获取K线数据 (get_security_bars):")
+        bars = api.get_security_bars(
+            category=9,      # K线类型: 0=5分钟, 1=15分钟, 2=30分钟, 3=1小时, 4=日线, 9=日线
             market=0,        # 市场: 0=深圳, 1=上海
             code="000001",   # 股票代码
             start=0,         # 起始位置
             count=10         # 获取数量
         )
-        print("获取 000001 日线数据:")
-        print(data)
+        print(api.to_df(bars) if bars else "无数据")
+        
+        # 3. 获取市场股票数量
+        print("\n[3] 获取市场股票数量 (get_security_count):")
+        count_sz = api.get_security_count(0)  # 深圳
+        count_sh = api.get_security_count(1)  # 上海
+        print(f"深圳市场股票数量: {count_sz}")
+        print(f"上海市场股票数量: {count_sh}")
+        
+        # 4. 获取股票列表
+        print("\n[4] 获取股票列表 (get_security_list):")
+        stock_list = api.get_security_list(0, 0)  # 深圳市场从0开始
+        print(api.to_df(stock_list[:10]) if stock_list else "无数据")
+        
+        # 5. 获取指数K线
+        print("\n[5] 获取指数K线 (get_index_bars):")
+        index_bars = api.get_index_bars(
+            category=9,      # 日线
+            market=1,        # 上海
+            code="000001",   # 上证指数
+            start=0,
+            count=10
+        )
+        print(api.to_df(index_bars) if index_bars else "无数据")
+        
+        # 6. 查询分时行情
+        print("\n[6] 查询分时行情 (get_minute_time_data):")
+        minute_data = api.get_minute_time_data(0, "000001")
+        print(api.to_df(minute_data[:10]) if minute_data else "无数据")
+        
+        # 7. 查询历史分时行情
+        print("\n[7] 查询历史分时行情 (get_history_minute_time_data):")
+        history_minute = api.get_history_minute_time_data(0, "000001", 20241201)
+        print(api.to_df(history_minute[:10]) if history_minute else "无数据")
+        
+        # 8. 查询分笔成交
+        print("\n[8] 查询分笔成交 (get_transaction_data):")
+        trans = api.get_transaction_data(0, "000001", 0, 10)
+        print(api.to_df(trans) if trans else "无数据")
+        
+        # 9. 查询历史分笔成交
+        print("\n[9] 查询历史分笔成交 (get_history_transaction_data):")
+        history_trans = api.get_history_transaction_data(0, "000001", 20241201, 0, 10)
+        print(api.to_df(history_trans) if history_trans else "无数据")
+        
+        # 10. 读取除权除息信息
+        print("\n[10] 读取除权除息信息 (get_xdxr_info):")
+        xdxr = api.get_xdxr_info(0, "000001")
+        print(api.to_df(xdxr[:5]) if xdxr else "无数据")
+        
+        # 11. 读取财务信息
+        print("\n[11] 读取财务信息 (get_finance_info):")
+        finance = api.get_finance_info(0, "000001")
+        print(finance if finance else "无数据")
+        
+        # 12. 查询公司信息目录
+        print("\n[12] 查询公司信息目录 (get_company_info_category):")
+        company_category = api.get_company_info_category(0, "000001")
+        print(company_category[:3] if company_category else "无数据")
+        
+        return True
+        
     except Exception as e:
-        print(f"标准行情接口测试失败: {e}")
+        print(f"❌ 标准行情接口测试失败: {e}")
+        return False
     finally:
         api.disconnect()
 
