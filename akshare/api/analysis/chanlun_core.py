@@ -139,6 +139,16 @@ class Segment:
     high: float  # 线段最高价
     low: float  # 线段最低价
     index: int = 0  # 在线段列表中的序号
+    
+    @property
+    def start_price(self) -> float:
+        """线段的起始价格：向上线段从低点开始，向下线段从高点开始"""
+        return self.low if self.direction == Direction.UP else self.high
+    
+    @property
+    def end_price(self) -> float:
+        """线段的结束价格：向上线段到高点结束，向下线段到低点结束"""
+        return self.high if self.direction == Direction.UP else self.low
 
 
 @dataclass
@@ -921,6 +931,8 @@ class ChanlunAnalyzer:
                     "direction": segment.direction.value,
                     "start_dt": segment.start_dt.isoformat(),
                     "end_dt": segment.end_dt.isoformat(),
+                    "start_price": segment.start_price,
+                    "end_price": segment.end_price,
                     "high": segment.high,
                     "low": segment.low,
                     "stroke_count": len(segment.strokes),
