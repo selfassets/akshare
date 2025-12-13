@@ -12,11 +12,12 @@
 不依赖 czsc 库，完全独立实现。
 """
 
-from typing import List, Optional, Literal, Dict, Any
+from typing import List, Optional, Literal, Dict, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import pandas as pd
+import numpy as np
 
 
 class Direction(Enum):
@@ -39,6 +40,14 @@ class TradePointType(Enum):
     SELL_1 = "sell_1"  # 第一类卖点
     SELL_2 = "sell_2"  # 第二类卖点
     SELL_3 = "sell_3"  # 第三类卖点
+
+
+class TrendType(Enum):
+    """走势类型"""
+    TREND_UP = "trend_up"  # 趋势上涨（两个以上同向中枢）
+    TREND_DOWN = "trend_down"  # 趋势下跌
+    CONSOLIDATION = "consolidation"  # 盘整（单中枢）
+    UNKNOWN = "unknown"  # 未知（数据不足）
 
 
 @dataclass
@@ -92,6 +101,9 @@ class Stroke:
     start_fractal: Fractal  # 起始分型
     end_fractal: Fractal  # 结束分型
     index: int = 0  # 在笔列表中的序号
+    macd_area: float = 0.0  # MACD 面积（用于背驰判断）
+    bar_start_idx: int = -1  # 起始K线在 bars_merged 中的索引
+    bar_end_idx: int = -1  # 结束K线在 bars_merged 中的索引
     
     @property
     def start_dt(self) -> datetime:
@@ -162,6 +174,7 @@ class Pivot:
     end_dt: datetime  # 中枢结束时间
     strokes: List[Stroke] = field(default_factory=list)  # 构成中枢的笔
     index: int = 0  # 在中枢列表中的序号
+    trend_type: TrendType = TrendType.UNKNOWN  # 中枢所在走势类型
     
     @property
     def center(self) -> float:
@@ -180,7 +193,8 @@ class TradePoint:
     point_type: TradePointType  # 买卖点类型
     dt: datetime  # 时间
     price: float  # 价格
-    strength: float = 0.0  # 强度（0-1，背驰程度）
+    strength: float = 0.0  # 强度（0-1，基于价格的背驰程度）
+    macd_strength: float = 0.0  # MACD 背驰强度（0-1）
     description: str = ""  # 描述
     index: int = 0  # 序号
 
@@ -211,19 +225,28 @@ class ChanlunAnalyzer:
         # 1. 处理包含关系
         self._merge_bars()
         
-        # 2. 识别分型
+        # 2. 计算 MACD 指标
+        self._calculate_macd()
+        
+        # 3. 识别分型
         self._identify_fractals()
         
-        # 3. 识别笔
+        # 4. 识别笔
         self._identify_strokes()
         
-        # 4. 识别线段
+        # 5. 计算笔的 MACD 面积
+        self._calculate_stroke_macd_area()
+        
+        # 6. 识别线段（使用特征序列方法）
         self._identify_segments()
         
-        # 5. 识别中枢
+        # 7. 识别中枢
         self._identify_pivots()
         
-        # 6. 识别买卖点
+        # 8. 识别趋势/盘整类型
+        self._identify_trend_type()
+        
+        # 9. 识别买卖点
         self._identify_trade_points()
     
     def _merge_bars(self):
@@ -313,6 +336,74 @@ class ChanlunAnalyzer:
         if bar2.high >= bar1.high and bar2.low <= bar1.low:
             return True
         return False
+    
+    def _calculate_macd(self, short: int = 12, long: int = 26, signal: int = 9):
+        """
+        计算 MACD 指标
+        
+        Args:
+            short: 短期 EMA 周期（默认12）
+            long: 长期 EMA 周期（默认26）
+            signal: 信号线周期（默认9）
+        """
+        if len(self.bars_merged) < long:
+            self.macd_dif = []
+            self.macd_dea = []
+            self.macd_hist = []
+            return
+        
+        # 提取收盘价
+        closes = np.array([bar.close for bar in self.bars_merged])
+        
+        # 计算 EMA
+        def ema(data: np.ndarray, period: int) -> np.ndarray:
+            alpha = 2 / (period + 1)
+            result = np.zeros_like(data)
+            result[0] = data[0]
+            for i in range(1, len(data)):
+                result[i] = alpha * data[i] + (1 - alpha) * result[i - 1]
+            return result
+        
+        ema_short = ema(closes, short)
+        ema_long = ema(closes, long)
+        
+        # DIF = 短期EMA - 长期EMA
+        dif = ema_short - ema_long
+        
+        # DEA = DIF 的 signal 周期 EMA
+        dea = ema(dif, signal)
+        
+        # MACD 柱状图 = (DIF - DEA) * 2
+        macd_hist = (dif - dea) * 2
+        
+        self.macd_dif = dif.tolist()
+        self.macd_dea = dea.tolist()
+        self.macd_hist = macd_hist.tolist()
+    
+    def _calculate_stroke_macd_area(self):
+        """
+        计算每一笔的 MACD 面积
+        
+        MACD 面积用于辅助背驰判断：
+        - 比较两段同向走势的 MACD 柱状图面积
+        - 如果后一段面积明显小于前一段，可能是背驰
+        """
+        if not hasattr(self, 'macd_hist') or not self.macd_hist:
+            return
+        
+        for stroke in self.strokes:
+            # 获取笔对应的 K 线索引范围
+            start_idx = stroke.bar_start_idx
+            end_idx = stroke.bar_end_idx
+            
+            if start_idx < 0 or end_idx < 0 or start_idx >= len(self.macd_hist):
+                continue
+            
+            end_idx = min(end_idx, len(self.macd_hist) - 1)
+            
+            # 计算 MACD 面积（取绝对值之和）
+            macd_area = sum(abs(self.macd_hist[i]) for i in range(start_idx, end_idx + 1))
+            stroke.macd_area = macd_area
     
     def _identify_fractals(self):
         """
@@ -456,12 +547,16 @@ class ChanlunAnalyzer:
                         best_end = next_fractal
                         best_end_idx = j
             
-            # 创建笔
+            # 创建笔（包含 K 线索引用于 MACD 计算）
+            start_idx = self._get_bar_index(current_start.dt)
+            end_idx = self._get_bar_index(best_end.dt)
             stroke = Stroke(
                 direction=direction,
                 start_fractal=current_start,
                 end_fractal=best_end,
-                index=len(strokes)
+                index=len(strokes),
+                bar_start_idx=start_idx,
+                bar_end_idx=end_idx
             )
             strokes.append(stroke)
             
@@ -535,14 +630,35 @@ class ChanlunAnalyzer:
         # 放宽标准：索引差 >= 3 表示有足够的间隔
         return abs(f2_index - f1_index) >= 3
     
+    def _get_bar_index(self, dt: datetime) -> int:
+        """
+        获取指定时间的 K 线在 bars_merged 中的索引
+        
+        Args:
+            dt: K 线时间
+        
+        Returns:
+            K 线索引，找不到返回 -1
+        """
+        for idx, bar in enumerate(self.bars_merged):
+            if bar.dt == dt:
+                return idx
+        return -1
+    
     def _identify_segments(self):
         """
-        识别线段
+        识别线段（使用特征序列方法）
         
-        线段定义：
+        线段定义（标准缠论）：
         - 至少由3笔构成
         - 线段方向由第一笔确定
-        - 当出现反向的特征序列分型时，线段结束
+        - 线段的结束由特征序列分型确定
+        
+        特征序列方法：
+        1. 将同向的笔抽象为特征序列元素（用笔的高低点代表）
+        2. 在特征序列上处理包含关系
+        3. 在特征序列上识别顶/底分型
+        4. 分型出现则线段结束
         """
         if len(self.strokes) < 3:
             return
@@ -551,53 +667,188 @@ class ChanlunAnalyzer:
         i = 0
         
         while i < len(self.strokes):
-            # 线段起始笔
-            start_stroke = self.strokes[i]
-            direction = start_stroke.direction
+            # 尝试从位置 i 开始识别一条线段
+            segment_result = self._identify_one_segment(i)
             
-            # 收集同方向的笔
-            strokes_in_segment = [start_stroke]
-            j = i + 1
-            
-            while j < len(self.strokes):
-                current_stroke = self.strokes[j]
-                next_stroke = self.strokes[j + 1] if j + 1 < len(self.strokes) else None
-                
-                # 检查是否形成线段终止（特征序列分型破坏）
-                if next_stroke and len(strokes_in_segment) >= 3:
-                    # 简化判断：如果连续出现反向笔导致价格突破前高/前低，则线段结束
-                    if direction == Direction.UP:
-                        # 向上线段：如果价格跌破前低，线段结束
-                        if current_stroke.end_price < strokes_in_segment[-2].end_price:
-                            break
-                    else:
-                        # 向下线段：如果价格突破前高，线段结束
-                        if current_stroke.end_price > strokes_in_segment[-2].end_price:
-                            break
-                
-                strokes_in_segment.append(current_stroke)
-                j += 1
-                
-                # 限制线段长度，避免过长
-                if len(strokes_in_segment) >= 20:
-                    break
-            
-            # 创建线段（至少3笔）
-            if len(strokes_in_segment) >= 3:
-                segment = Segment(
-                    direction=direction,
-                    strokes=strokes_in_segment,
-                    start_dt=strokes_in_segment[0].start_dt,
-                    end_dt=strokes_in_segment[-1].end_dt,
-                    high=max(s.high for s in strokes_in_segment),
-                    low=min(s.low for s in strokes_in_segment),
-                    index=len(segments)
-                )
+            if segment_result is not None:
+                segment, next_i = segment_result
                 segments.append(segment)
-            
-            i = j if j > i else i + 1
+                segment.index = len(segments) - 1
+                i = next_i
+            else:
+                i += 1
         
         self.segments = segments
+    
+    def _identify_one_segment(self, start_idx: int) -> Optional[Tuple[Segment, int]]:
+        """
+        从指定位置开始识别一条线段
+        
+        Args:
+            start_idx: 起始笔索引
+        
+        Returns:
+            (线段, 下一个起始位置) 或 None
+        """
+        if start_idx >= len(self.strokes):
+            return None
+        
+        # 线段方向由第一笔确定
+        direction = self.strokes[start_idx].direction
+        
+        # 收集所有笔直到识别出线段结束
+        strokes_collected = []
+        j = start_idx
+        
+        while j < len(self.strokes):
+            strokes_collected.append(self.strokes[j])
+            
+            # 至少需要3笔才能形成线段
+            if len(strokes_collected) >= 3:
+                # 构建特征序列并检查是否有分型
+                feature_fractal = self._check_feature_sequence_fractal(strokes_collected, direction)
+                
+                if feature_fractal is not None:
+                    # 找到特征序列分型，线段结束
+                    # 线段结束点是分型对应的笔
+                    end_stroke_idx = feature_fractal
+                    strokes_in_segment = strokes_collected[:end_stroke_idx + 1]
+                    
+                    if len(strokes_in_segment) >= 3:
+                        segment = Segment(
+                            direction=direction,
+                            strokes=strokes_in_segment,
+                            start_dt=strokes_in_segment[0].start_dt,
+                            end_dt=strokes_in_segment[-1].end_dt,
+                            high=max(s.high for s in strokes_in_segment),
+                            low=min(s.low for s in strokes_in_segment),
+                            index=0
+                        )
+                        # 下一个线段从当前线段的最后一笔开始
+                        return (segment, start_idx + len(strokes_in_segment) - 1)
+            
+            j += 1
+            
+            # 防止线段过长
+            if len(strokes_collected) >= 25:
+                break
+        
+        # 如果没有找到特征序列分型但有足够的笔，也创建线段
+        if len(strokes_collected) >= 3:
+            segment = Segment(
+                direction=direction,
+                strokes=strokes_collected,
+                start_dt=strokes_collected[0].start_dt,
+                end_dt=strokes_collected[-1].end_dt,
+                high=max(s.high for s in strokes_collected),
+                low=min(s.low for s in strokes_collected),
+                index=0
+            )
+            return (segment, start_idx + len(strokes_collected))
+        
+        return None
+    
+    def _check_feature_sequence_fractal(self, strokes: List[Stroke], seg_direction: Direction) -> Optional[int]:
+        """
+        检查笔序列中的特征序列是否形成分型
+        
+        特征序列定义：
+        - 向上线段：取所有向下笔作为特征序列元素
+        - 向下线段：取所有向上笔作为特征序列元素
+        
+        Args:
+            strokes: 笔列表
+            seg_direction: 线段方向
+        
+        Returns:
+            特征序列分型对应的笔索引，None 表示未找到
+        """
+        # 提取特征序列元素（与线段方向相反的笔）
+        feature_elements = []
+        for idx, stroke in enumerate(strokes):
+            if stroke.direction != seg_direction:
+                feature_elements.append({
+                    'idx': idx,
+                    'high': stroke.high,
+                    'low': stroke.low,
+                    'stroke': stroke
+                })
+        
+        if len(feature_elements) < 3:
+            return None
+        
+        # 处理特征序列的包含关系
+        merged_features = self._merge_feature_sequence(feature_elements, seg_direction)
+        
+        if len(merged_features) < 3:
+            return None
+        
+        # 在合并后的特征序列上识别分型
+        for i in range(len(merged_features) - 2):
+            f1, f2, f3 = merged_features[i], merged_features[i + 1], merged_features[i + 2]
+            
+            if seg_direction == Direction.UP:
+                # 向上线段找底分型（特征序列的底分型表示线段结束）
+                if f2['low'] < f1['low'] and f2['low'] < f3['low']:
+                    # 返回底分型中间元素对应的原始笔索引
+                    return f2['idx']
+            else:
+                # 向下线段找顶分型
+                if f2['high'] > f1['high'] and f2['high'] > f3['high']:
+                    return f2['idx']
+        
+        return None
+    
+    def _merge_feature_sequence(self, features: List[Dict], seg_direction: Direction) -> List[Dict]:
+        """
+        处理特征序列的包含关系
+        
+        Args:
+            features: 特征序列元素列表
+            seg_direction: 线段方向
+        
+        Returns:
+            处理包含关系后的特征序列
+        """
+        if len(features) < 2:
+            return features
+        
+        merged = [features[0].copy()]
+        
+        for i in range(1, len(features)):
+            current = features[i]
+            last = merged[-1]
+            
+            # 检查包含关系
+            has_inclusion = (
+                (last['high'] >= current['high'] and last['low'] <= current['low']) or
+                (current['high'] >= last['high'] and current['low'] <= last['low'])
+            )
+            
+            if has_inclusion:
+                # 根据线段方向处理包含
+                if seg_direction == Direction.UP:
+                    # 向上线段：特征序列向下，取低点更低者
+                    if current['low'] < last['low']:
+                        merged[-1] = {
+                            'idx': current['idx'],
+                            'high': min(last['high'], current['high']),
+                            'low': current['low'],
+                            'stroke': current['stroke']
+                        }
+                else:
+                    # 向下线段：特征序列向上，取高点更高者
+                    if current['high'] > last['high']:
+                        merged[-1] = {
+                            'idx': current['idx'],
+                            'high': current['high'],
+                            'low': max(last['low'], current['low']),
+                            'stroke': current['stroke']
+                        }
+            else:
+                merged.append(current.copy())
+        
+        return merged
     
     def _identify_pivots(self):
         """
@@ -660,6 +911,56 @@ class ChanlunAnalyzer:
         
         self.pivots = pivots
     
+    def _identify_trend_type(self):
+        """
+        识别走势类型（趋势/盘整）
+        
+        走势类型定义：
+        - 趋势上涨：存在两个以上向上的中枢，且后一个中枢高于前一个
+        - 趋势下跌：存在两个以上向下的中枢，且后一个中枢低于前一个
+        - 盘整：单中枢或中枢之间有重叠
+        """
+        if len(self.pivots) < 1:
+            return
+        
+        # 如果只有一个中枢，标记为盘整
+        if len(self.pivots) == 1:
+            self.pivots[0].trend_type = TrendType.CONSOLIDATION
+            return
+        
+        # 分析相邻中枢的关系
+        for i in range(len(self.pivots)):
+            if i == 0:
+                # 第一个中枢暂时标记为未知
+                self.pivots[i].trend_type = TrendType.UNKNOWN
+                continue
+            
+            prev_pivot = self.pivots[i - 1]
+            curr_pivot = self.pivots[i]
+            
+            # 检查中枢是否有重叠
+            has_overlap = (
+                curr_pivot.low <= prev_pivot.high and 
+                curr_pivot.high >= prev_pivot.low
+            )
+            
+            if has_overlap:
+                # 重叠则为盘整
+                curr_pivot.trend_type = TrendType.CONSOLIDATION
+                prev_pivot.trend_type = TrendType.CONSOLIDATION
+            else:
+                # 不重叠则为趋势
+                if curr_pivot.center > prev_pivot.center:
+                    # 中枢抬高，趋势上涨
+                    curr_pivot.trend_type = TrendType.TREND_UP
+                    if prev_pivot.trend_type == TrendType.UNKNOWN:
+                        prev_pivot.trend_type = TrendType.TREND_UP
+                else:
+                    # 中枢降低，趋势下跌
+                    curr_pivot.trend_type = TrendType.TREND_DOWN
+                    if prev_pivot.trend_type == TrendType.UNKNOWN:
+                        prev_pivot.trend_type = TrendType.TREND_DOWN
+    
     def _identify_trade_points(self):
         """
         识别买卖点
@@ -694,11 +995,10 @@ class ChanlunAnalyzer:
         """
         识别第一类买卖点（基于背驰）
         
-        背驰判定：
-        - 下跌趋势中，后一段下跌的力度小于前一段
-        - 上涨趋势中，后一段上涨的力度小于前一段
-        
-        简化的力度计算：使用笔的幅度 * 时间
+        背驰判定（增强版）：
+        - 价格背驰：后一段走势创新高/新低，但力度减弱
+        - MACD 背驰：后一段 MACD 面积明显小于前一段
+        - 综合判断：价格和 MACD 双重确认提高可靠性
         """
         if len(self.strokes) < 5:
             return
@@ -716,41 +1016,85 @@ class ChanlunAnalyzer:
             if prev_same_dir is None:
                 continue
             
-            # 计算笔的力度（幅度）
+            # 计算价格力度（幅度）
             current_power = current.power
             prev_power = prev_same_dir.power
             
-            # 背驰判断：当前笔力度明显小于前一同向笔
-            is_divergence = current_power < prev_power * 0.8
-            divergence_strength = 1 - (current_power / max(prev_power, 0.001))
+            # 计算 MACD 面积比
+            current_macd = current.macd_area if current.macd_area > 0 else 0.001
+            prev_macd = prev_same_dir.macd_area if prev_same_dir.macd_area > 0 else 0.001
             
-            if not is_divergence:
+            # 价格背驰判断：当前笔力度明显小于前一同向笔
+            price_ratio = current_power / max(prev_power, 0.001)
+            is_price_divergence = price_ratio < 0.8
+            price_strength = 1 - price_ratio if is_price_divergence else 0
+            
+            # MACD 背驰判断
+            macd_ratio = current_macd / max(prev_macd, 0.001)
+            is_macd_divergence = macd_ratio < 0.8
+            macd_strength = 1 - macd_ratio if is_macd_divergence else 0
+            
+            # 综合判断：至少一个背驰，双重背驰可靠性更高
+            if not (is_price_divergence or is_macd_divergence):
                 continue
             
-            # 第一类买点：向下笔出现背驰，且创新低
+            # 判断是否创新高/新低
             if current.direction == Direction.DOWN:
+                # 第一类买点：向下笔出现背驰，且创新低
                 is_new_low = current.end_price <= prev_same_dir.end_price
                 if is_new_low:
+                    # 综合强度
+                    combined_strength = 0.5
+                    if is_price_divergence and is_macd_divergence:
+                        combined_strength = 0.8 + min(price_strength, macd_strength) * 0.15
+                    elif is_price_divergence:
+                        combined_strength = 0.6 + price_strength * 0.2
+                    elif is_macd_divergence:
+                        combined_strength = 0.55 + macd_strength * 0.2
+                    
+                    divergence_desc = []
+                    if is_price_divergence:
+                        divergence_desc.append(f"价格力度比={price_ratio:.2f}")
+                    if is_macd_divergence:
+                        divergence_desc.append(f"MACD面积比={macd_ratio:.2f}")
+                    
                     trade_point = TradePoint(
                         point_type=TradePointType.BUY_1,
                         dt=current.end_dt,
                         price=current.end_price,
-                        strength=min(0.9, 0.5 + divergence_strength * 0.4),
-                        description=f"第一类买点：底背驰（力度比={current_power/max(prev_power,0.001):.2f}）",
+                        strength=min(0.95, combined_strength),
+                        macd_strength=macd_strength,
+                        description=f"第一类买点：底背驰（{', '.join(divergence_desc)}）",
                         index=len(trade_points)
                     )
                     trade_points.append(trade_point)
             
-            # 第一类卖点：向上笔出现背驰，且创新高
             elif current.direction == Direction.UP:
+                # 第一类卖点：向上笔出现背驰，且创新高
                 is_new_high = current.end_price >= prev_same_dir.end_price
                 if is_new_high:
+                    # 综合强度
+                    combined_strength = 0.5
+                    if is_price_divergence and is_macd_divergence:
+                        combined_strength = 0.8 + min(price_strength, macd_strength) * 0.15
+                    elif is_price_divergence:
+                        combined_strength = 0.6 + price_strength * 0.2
+                    elif is_macd_divergence:
+                        combined_strength = 0.55 + macd_strength * 0.2
+                    
+                    divergence_desc = []
+                    if is_price_divergence:
+                        divergence_desc.append(f"价格力度比={price_ratio:.2f}")
+                    if is_macd_divergence:
+                        divergence_desc.append(f"MACD面积比={macd_ratio:.2f}")
+                    
                     trade_point = TradePoint(
                         point_type=TradePointType.SELL_1,
                         dt=current.end_dt,
                         price=current.end_price,
-                        strength=min(0.9, 0.5 + divergence_strength * 0.4),
-                        description=f"第一类卖点：顶背驰（力度比={current_power/max(prev_power,0.001):.2f}）",
+                        strength=min(0.95, combined_strength),
+                        macd_strength=macd_strength,
+                        description=f"第一类卖点：顶背驰（{', '.join(divergence_desc)}）",
                         index=len(trade_points)
                     )
                     trade_points.append(trade_point)
@@ -923,6 +1267,7 @@ class ChanlunAnalyzer:
                     "high": stroke.high,
                     "low": stroke.low,
                     "power": stroke.power,
+                    "macd_area": stroke.macd_area,  # 新增
                 }
                 for stroke in self.strokes
             ],
@@ -950,6 +1295,7 @@ class ChanlunAnalyzer:
                     "start_dt": pivot.start_dt.isoformat(),
                     "end_dt": pivot.end_dt.isoformat(),
                     "stroke_count": len(pivot.strokes),
+                    "trend_type": pivot.trend_type.value,  # 新增
                 }
                 for pivot in self.pivots
             ],
@@ -959,6 +1305,7 @@ class ChanlunAnalyzer:
                     "dt": point.dt.isoformat(),
                     "price": point.price,
                     "strength": point.strength,
+                    "macd_strength": point.macd_strength,  # 新增
                     "description": point.description,
                 }
                 for point in self.trade_points
@@ -1043,3 +1390,191 @@ def create_bars_from_dataframe(df: pd.DataFrame, symbol: str = "") -> List[Bar]:
             continue
     
     return bars
+
+
+class MultiLevelAnalyzer:
+    """
+    多级别缠论分析器
+    
+    实现多级别递归分析，支持：
+    - 将低级别的线段作为高级别的笔
+    - 区间套买卖点识别
+    """
+    
+    def __init__(self, bars: List[Bar], levels: int = 3):
+        """
+        初始化多级别分析器
+        
+        Args:
+            bars: 最低级别 K 线
+            levels: 分析级别数（向上递归，默认3级）
+        """
+        self.bars = bars
+        self.levels = min(max(levels, 1), 5)  # 限制1-5级
+        self.analyzers: Dict[int, ChanlunAnalyzer] = {}
+        self.nested_trade_points: List[TradePoint] = []
+        
+        # 执行多级别分析
+        self._analyze()
+    
+    def _analyze(self):
+        """执行多级别递归分析"""
+        # 第1级：原始K线分析
+        self.analyzers[1] = ChanlunAnalyzer(self.bars)
+        
+        # 递归分析更高级别
+        for level in range(2, self.levels + 1):
+            prev_analyzer = self.analyzers[level - 1]
+            
+            # 使用上一级别的线段构建当前级别的 K 线
+            higher_bars = self._segments_to_bars(prev_analyzer.segments, level)
+            
+            if len(higher_bars) < 3:
+                # 数据不足，停止递归
+                break
+            
+            self.analyzers[level] = ChanlunAnalyzer(higher_bars)
+        
+        # 寻找区间套买卖点
+        self._find_nested_trade_points()
+    
+    def _segments_to_bars(self, segments: List[Segment], level: int) -> List[Bar]:
+        """
+        将线段转换为 K 线（用于高级别分析）
+        
+        Args:
+            segments: 线段列表
+            level: 当前级别
+        
+        Returns:
+            K 线列表
+        """
+        bars = []
+        for i, seg in enumerate(segments):
+            # 用线段的起止时间和高低点构造 K 线
+            if seg.direction == Direction.UP:
+                bar = Bar(
+                    dt=seg.end_dt,
+                    open=seg.low,
+                    close=seg.high,
+                    high=seg.high,
+                    low=seg.low,
+                    vol=0.0,
+                    symbol=f"L{level}",
+                    index=i
+                )
+            else:
+                bar = Bar(
+                    dt=seg.end_dt,
+                    open=seg.high,
+                    close=seg.low,
+                    high=seg.high,
+                    low=seg.low,
+                    vol=0.0,
+                    symbol=f"L{level}",
+                    index=i
+                )
+            bars.append(bar)
+        return bars
+    
+    def _find_nested_trade_points(self):
+        """
+        寻找区间套买卖点
+        
+        区间套：当多个级别同时出现买卖点信号时，形成更可靠的买卖点
+        """
+        nested_points = []
+        
+        # 获取所有级别的买卖点
+        all_trade_points: Dict[int, List[TradePoint]] = {}
+        for level, analyzer in self.analyzers.items():
+            all_trade_points[level] = analyzer.trade_points
+        
+        # 以最低级别为基准，检查是否有更高级别的确认
+        base_points = all_trade_points.get(1, [])
+        
+        for base_tp in base_points:
+            confirmation_count = 1  # 基础级别算1次确认
+            confirming_levels = [1]
+            
+            # 检查更高级别是否有类似的买卖点
+            for level in range(2, self.levels + 1):
+                if level not in all_trade_points:
+                    continue
+                
+                higher_points = all_trade_points[level]
+                
+                for higher_tp in higher_points:
+                    # 检查是否是同类型的买卖点
+                    if higher_tp.point_type != base_tp.point_type:
+                        continue
+                    
+                    # 检查时间是否接近（高级别时间精度较低）
+                    time_diff = abs((higher_tp.dt - base_tp.dt).days)
+                    tolerance = level * 5  # 级别越高，容忍的时间差越大
+                    
+                    if time_diff <= tolerance:
+                        confirmation_count += 1
+                        confirming_levels.append(level)
+                        break
+            
+            # 如果有多级别确认，创建区间套买卖点
+            if confirmation_count >= 2:
+                # 增强信号强度
+                enhanced_strength = min(0.98, base_tp.strength + 0.1 * (confirmation_count - 1))
+                
+                nested_tp = TradePoint(
+                    point_type=base_tp.point_type,
+                    dt=base_tp.dt,
+                    price=base_tp.price,
+                    strength=enhanced_strength,
+                    macd_strength=base_tp.macd_strength,
+                    description=f"区间套{base_tp.description}（{confirmation_count}级别确认：L{confirming_levels}）",
+                    index=len(nested_points)
+                )
+                nested_points.append(nested_tp)
+        
+        self.nested_trade_points = nested_points
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        转换为字典格式，用于API返回
+        
+        Returns:
+            包含所有级别分析结果的字典
+        """
+        result = {
+            "levels": {},
+            "nested_trade_points": [
+                {
+                    "type": tp.point_type.value,
+                    "dt": tp.dt.isoformat(),
+                    "price": tp.price,
+                    "strength": tp.strength,
+                    "macd_strength": tp.macd_strength,
+                    "description": tp.description,
+                }
+                for tp in self.nested_trade_points
+            ],
+        }
+        
+        for level, analyzer in self.analyzers.items():
+            result["levels"][f"level_{level}"] = {
+                "fractals_count": len(analyzer.fractals),
+                "strokes_count": len(analyzer.strokes),
+                "segments_count": len(analyzer.segments),
+                "pivots_count": len(analyzer.pivots),
+                "trade_points_count": len(analyzer.trade_points),
+                "trade_points": [
+                    {
+                        "type": tp.point_type.value,
+                        "dt": tp.dt.isoformat(),
+                        "price": tp.price,
+                        "strength": tp.strength,
+                        "description": tp.description,
+                    }
+                    for tp in analyzer.trade_points
+                ],
+            }
+        
+        return result

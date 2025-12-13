@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 import pandas as pd
 
 from akshare.futures_derivative.futures_index_sina import futures_main_sina
-from akshare.api.analysis.chanlun_core import ChanlunAnalyzer, create_bars_from_dataframe
+from akshare.api.analysis.chanlun_core import ChanlunAnalyzer, MultiLevelAnalyzer, create_bars_from_dataframe
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -314,6 +314,105 @@ async def get_results(
     
     return response
 
+
+@router.get("/multi-level", response_model=Dict[str, Any])
+async def analyze_multi_level(
+    symbol: str = Query("eg2601", description="期货代码"),
+    start_date: str = Query("20250101", description="开始日期 YYYYMMDD"),
+    end_date: str = Query("20261231", description="结束日期 YYYYMMDD"),
+    levels: int = Query(3, ge=2, le=5, description="分析级别数（2-5）"),
+):
+    """
+    多级别递归缠论分析
+    
+    将低级别的线段作为高级别的笔进行递归分析，支持区间套买卖点识别。
+    
+    **参数说明**:
+    - `levels`: 分析级别数，2-5级，默认3级
+    
+    **返回数据**:
+    - `levels`: 各级别分析结果
+    - `nested_trade_points`: 区间套买卖点（多级别确认的高可靠性买卖点）
+    
+    **示例**:
+    ```
+    GET /chanlun/multi-level?symbol=eg2601&start_date=20250101&end_date=20261231&levels=3
+    ```
+    """
+    # 验证日期
+    _validate_date_format(start_date, "start_date")
+    _validate_date_format(end_date, "end_date")
+    
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail=f"开始日期 ({start_date}) 不能晚于结束日期 ({end_date})"
+        )
+    
+    try:
+        logger.info(
+            f"开始多级别缠论分析: symbol={symbol}, levels={levels}"
+        )
+        
+        # 获取 K 线数据
+        df = futures_main_sina(symbol=symbol, start_date=start_date, end_date=end_date)
+        
+        if df.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"未找到品种 {symbol} 的K线数据"
+            )
+        
+        # 日期过滤
+        date_col = None
+        for col in ['日期', 'date', 'trading_date', 'datetime', 'dt']:
+            if col in df.columns:
+                date_col = col
+                break
+        
+        if date_col:
+            df[date_col] = pd.to_datetime(df[date_col])
+            start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+            end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+            df = df[(df[date_col] >= start_dt) & (df[date_col] <= end_dt)]
+        
+        # 转换为 Bar 列表
+        bars = create_bars_from_dataframe(df, symbol=symbol)
+        
+        if len(bars) < 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"数据量不足，至少需要10根K线，当前只有{len(bars)}根"
+            )
+        
+        # 执行多级别分析
+        multi_analyzer = MultiLevelAnalyzer(bars, levels=levels)
+        result = multi_analyzer.to_dict()
+        
+        # 添加统计信息
+        result["stats"] = {
+            "symbol": symbol,
+            "requested_levels": levels,
+            "actual_levels": len(multi_analyzer.analyzers),
+            "nested_trade_points_count": len(multi_analyzer.nested_trade_points),
+            "analysis_time": datetime.now().isoformat(),
+        }
+        
+        logger.info(
+            f"多级别分析完成: {len(multi_analyzer.analyzers)}级别, "
+            f"{len(multi_analyzer.nested_trade_points)}个区间套买卖点"
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"多级别分析失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"多级别分析失败: {str(e)}"
+        )
 
 
 @router.get("/health", response_model=Dict[str, str])
