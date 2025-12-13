@@ -309,8 +309,10 @@ class ChanlunAnalyzer:
         识别分型
         
         分型定义（使用处理过包含关系的K线）：
-        - 顶分型：第2根K线高点是3根K线中最高的，且第2根K线低点 >= 第1、3根的低点
-        - 底分型：第2根K线低点是3根K线中最低的，且第2根K线高点 <= 第1、3根的高点
+        - 顶分型：第2根K线高点严格高于第1、3根K线的高点
+        - 底分型：第2根K线低点严格低于第1、3根K线的低点
+        
+        注意：处理包含关系后的K线不存在包含关系，因此只需检查高点或低点
         """
         if len(self.bars_merged) < 3:
             return
@@ -323,14 +325,16 @@ class ChanlunAnalyzer:
             bar2 = self.bars_merged[i + 1]
             bar3 = self.bars_merged[i + 2]
             
-            # 检查顶分型
-            if (bar2.high >= bar1.high and bar2.high >= bar3.high and
-                bar2.low >= bar1.low and bar2.low >= bar3.low):
+            # 检查顶分型：中间K线高点严格最高
+            if bar2.high > bar1.high and bar2.high > bar3.high:
+                # 计算分型强度：高点突出程度
+                power = min(bar2.high - bar1.high, bar2.high - bar3.high)
                 fractal = Fractal(
                     fractal_type=FractalType.TOP,
                     dt=bar2.dt,
                     high=bar2.high,
                     low=bar2.low,
+                    power=power,
                     bars=[bar1, bar2, bar3],
                     index=len(fractals)
                 )
@@ -338,14 +342,16 @@ class ChanlunAnalyzer:
                 i += 2  # 跳过已识别的分型
                 continue
             
-            # 检查底分型
-            if (bar2.low <= bar1.low and bar2.low <= bar3.low and
-                bar2.high <= bar1.high and bar2.high <= bar3.high):
+            # 检查底分型：中间K线低点严格最低
+            if bar2.low < bar1.low and bar2.low < bar3.low:
+                # 计算分型强度：低点突出程度
+                power = min(bar1.low - bar2.low, bar3.low - bar2.low)
                 fractal = Fractal(
                     fractal_type=FractalType.BOTTOM,
                     dt=bar2.dt,
                     high=bar2.high,
                     low=bar2.low,
+                    power=power,
                     bars=[bar1, bar2, bar3],
                     index=len(fractals)
                 )
@@ -364,39 +370,134 @@ class ChanlunAnalyzer:
         笔的定义：
         - 由顶分型和底分型交替构成
         - 相邻两个分型之间至少有一根独立K线（处理包含关系后）
-        - 向上笔：底分型 -> 顶分型
-        - 向下笔：顶分型 -> 底分型
+        - 向上笔：底分型 -> 顶分型，且顶分型高点 > 底分型高点
+        - 向下笔：顶分型 -> 底分型，且底分型低点 < 顶分型低点
+        
+        使用状态机模式确保笔序列连续且方向交替
         """
         if len(self.fractals) < 2:
             return
         
         strokes = []
-        i = 0
         
-        while i < len(self.fractals) - 1:
-            start_fractal = self.fractals[i]
-            end_fractal = self.fractals[i + 1]
+        # 找到第一个有效的分型作为起点
+        current_start = self._find_first_valid_start()
+        if current_start is None:
+            return
+        
+        # 状态机：从起始分型开始，寻找可以形成笔的结束分型
+        i = self.fractals.index(current_start) + 1
+        
+        while i < len(self.fractals):
+            candidate_end = self.fractals[i]
             
-            # 检查相邻分型是否可以形成笔
-            if start_fractal.fractal_type != end_fractal.fractal_type:
-                # 确定笔的方向
-                if start_fractal.fractal_type == FractalType.BOTTOM:
-                    direction = Direction.UP
+            # 必须是不同类型的分型
+            if candidate_end.fractal_type == current_start.fractal_type:
+                # 同类型：更新起始分型为更极端的那个
+                if current_start.fractal_type == FractalType.TOP:
+                    if candidate_end.high > current_start.high:
+                        current_start = candidate_end
                 else:
-                    direction = Direction.DOWN
-                
-                # 创建笔
-                stroke = Stroke(
-                    direction=direction,
-                    start_fractal=start_fractal,
-                    end_fractal=end_fractal,
-                    index=len(strokes)
-                )
-                strokes.append(stroke)
+                    if candidate_end.low < current_start.low:
+                        current_start = candidate_end
+                i += 1
+                continue
             
-            i += 1
+            # 检查是否有足够的K线间隔
+            if not self._has_enough_bars_between(current_start, candidate_end):
+                i += 1
+                continue
+            
+            # 验证价格关系
+            if current_start.fractal_type == FractalType.BOTTOM:
+                # 向上笔：终点高点必须高于起点高点
+                if candidate_end.high <= current_start.high:
+                    i += 1
+                    continue
+                direction = Direction.UP
+            else:
+                # 向下笔：终点低点必须低于起点低点
+                if candidate_end.low >= current_start.low:
+                    i += 1
+                    continue
+                direction = Direction.DOWN
+            
+            # 向前看：是否有更好的结束分型？
+            best_end = candidate_end
+            for j in range(i + 1, len(self.fractals)):
+                next_fractal = self.fractals[j]
+                if next_fractal.fractal_type != candidate_end.fractal_type:
+                    break  # 遇到不同类型，停止搜索
+                # 检查是否更极端
+                if direction == Direction.UP:
+                    if next_fractal.high > best_end.high and self._has_enough_bars_between(current_start, next_fractal):
+                        best_end = next_fractal
+                else:
+                    if next_fractal.low < best_end.low and self._has_enough_bars_between(current_start, next_fractal):
+                        best_end = next_fractal
+            
+            # 创建笔
+            stroke = Stroke(
+                direction=direction,
+                start_fractal=current_start,
+                end_fractal=best_end,
+                index=len(strokes)
+            )
+            strokes.append(stroke)
+            
+            # 以当前笔的结束分型作为下一笔的起始分型
+            current_start = best_end
+            i = self.fractals.index(best_end) + 1
         
         self.strokes = strokes
+    
+    def _find_first_valid_start(self) -> Optional[Fractal]:
+        """
+        找到第一个有效的起始分型
+        
+        策略：找到第一个能与后续分型形成笔的分型
+        """
+        for i, fractal in enumerate(self.fractals):
+            # 检查是否能与后续任意分型形成有效笔
+            for j in range(i + 1, len(self.fractals)):
+                next_fractal = self.fractals[j]
+                if next_fractal.fractal_type != fractal.fractal_type:
+                    if self._has_enough_bars_between(fractal, next_fractal):
+                        # 验证价格关系
+                        if fractal.fractal_type == FractalType.BOTTOM:
+                            if next_fractal.high > fractal.high:
+                                return fractal
+                        else:
+                            if next_fractal.low < fractal.low:
+                                return fractal
+                    break  # 只检查第一个不同类型的分型
+        return self.fractals[0] if self.fractals else None
+    
+    def _has_enough_bars_between(self, f1: Fractal, f2: Fractal) -> bool:
+        """
+        检查两个分型之间是否有足够的K线
+        
+        标准：两个分型之间至少有1根独立K线（不被两个分型共用）
+        由于分型由3根K线组成，需要两个分型的中间K线索引差 >= 4
+        """
+        # 找到两个分型中间K线在 bars_merged 中的索引
+        f1_dt = f1.dt
+        f2_dt = f2.dt
+        
+        f1_index = -1
+        f2_index = -1
+        
+        for idx, bar in enumerate(self.bars_merged):
+            if bar.dt == f1_dt:
+                f1_index = idx
+            if bar.dt == f2_dt:
+                f2_index = idx
+        
+        if f1_index == -1 or f2_index == -1:
+            return False
+        
+        # 中间K线索引差 >= 4 表示有至少1根独立K线
+        return abs(f2_index - f1_index) >= 4
     
     def _identify_segments(self):
         """
@@ -527,98 +628,214 @@ class ChanlunAnalyzer:
         """
         识别买卖点
         
-        买卖点类型（简化实现）：
-        - 第一类买点：下跌趋势的最低点（底背驰）
-        - 第三类买点：中枢突破向上
-        - 第一类卖点：上涨趋势的最高点（顶背驰）
-        - 第三类卖点：中枢突破向下
+        买卖点类型：
+        - 第一类买点：下跌趋势中出现底背驰
+        - 第二类买点：一买后的回调不创新低
+        - 第三类买点：中枢突破向上后回踩不进中枢
+        - 第一类卖点：上涨趋势中出现顶背驰
+        - 第二类卖点：一卖后的反弹不创新高
+        - 第三类卖点：中枢突破向下后反抽不进中枢
         """
         trade_points = []
         
-        # 基于笔识别买卖点
-        for i, stroke in enumerate(self.strokes):
-            if i == 0:
+        # 1. 基于笔识别一类买卖点（背驰判断）
+        self._identify_first_class_points(trade_points)
+        
+        # 2. 基于一类买卖点识别二类买卖点
+        self._identify_second_class_points(trade_points)
+        
+        # 3. 基于中枢识别三类买卖点
+        self._identify_third_class_points(trade_points)
+        
+        # 按时间排序
+        trade_points.sort(key=lambda p: p.dt)
+        for i, tp in enumerate(trade_points):
+            tp.index = i
+        
+        self.trade_points = trade_points
+    
+    def _identify_first_class_points(self, trade_points: List[TradePoint]):
+        """
+        识别第一类买卖点（基于背驰）
+        
+        背驰判定：
+        - 下跌趋势中，后一段下跌的力度小于前一段
+        - 上涨趋势中，后一段上涨的力度小于前一段
+        
+        简化的力度计算：使用笔的幅度 * 时间
+        """
+        if len(self.strokes) < 5:
+            return
+        
+        for i in range(4, len(self.strokes)):
+            current = self.strokes[i]
+            
+            # 找前面同向的笔进行比较
+            prev_same_dir = None
+            for j in range(i - 2, -1, -2):  # 同向笔间隔2
+                if j >= 0 and self.strokes[j].direction == current.direction:
+                    prev_same_dir = self.strokes[j]
+                    break
+            
+            if prev_same_dir is None:
                 continue
             
-            prev_stroke = self.strokes[i - 1]
+            # 计算笔的力度（幅度）
+            current_power = current.power
+            prev_power = prev_same_dir.power
             
-            # 第一类买点：向下笔后的向上笔，且创新低后反转
-            if prev_stroke.direction == Direction.DOWN and stroke.direction == Direction.UP:
-                # 检查是否是局部最低点
-                is_low_point = True
-                for j in range(max(0, i - 3), min(len(self.strokes), i + 3)):
-                    if j != i - 1 and self.strokes[j].low < prev_stroke.low:
-                        is_low_point = False
-                        break
-                
-                if is_low_point:
+            # 背驰判断：当前笔力度明显小于前一同向笔
+            is_divergence = current_power < prev_power * 0.8
+            divergence_strength = 1 - (current_power / max(prev_power, 0.001))
+            
+            if not is_divergence:
+                continue
+            
+            # 第一类买点：向下笔出现背驰，且创新低
+            if current.direction == Direction.DOWN:
+                is_new_low = current.end_price <= prev_same_dir.end_price
+                if is_new_low:
                     trade_point = TradePoint(
                         point_type=TradePointType.BUY_1,
-                        dt=stroke.start_dt,
-                        price=stroke.start_price,
-                        strength=0.8,
-                        description="第一类买点：底部反转",
+                        dt=current.end_dt,
+                        price=current.end_price,
+                        strength=min(0.9, 0.5 + divergence_strength * 0.4),
+                        description=f"第一类买点：底背驰（力度比={current_power/max(prev_power,0.001):.2f}）",
                         index=len(trade_points)
                     )
                     trade_points.append(trade_point)
             
-            # 第一类卖点：向上笔后的向下笔，且创新高后反转
-            if prev_stroke.direction == Direction.UP and stroke.direction == Direction.DOWN:
-                # 检查是否是局部最高点
-                is_high_point = True
-                for j in range(max(0, i - 3), min(len(self.strokes), i + 3)):
-                    if j != i - 1 and self.strokes[j].high > prev_stroke.high:
-                        is_high_point = False
-                        break
-                
-                if is_high_point:
+            # 第一类卖点：向上笔出现背驰，且创新高
+            elif current.direction == Direction.UP:
+                is_new_high = current.end_price >= prev_same_dir.end_price
+                if is_new_high:
                     trade_point = TradePoint(
                         point_type=TradePointType.SELL_1,
-                        dt=stroke.start_dt,
-                        price=stroke.start_price,
-                        strength=0.8,
-                        description="第一类卖点：顶部反转",
+                        dt=current.end_dt,
+                        price=current.end_price,
+                        strength=min(0.9, 0.5 + divergence_strength * 0.4),
+                        description=f"第一类卖点：顶背驰（力度比={current_power/max(prev_power,0.001):.2f}）",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+    
+    def _identify_second_class_points(self, trade_points: List[TradePoint]):
+        """
+        识别第二类买卖点
+        
+        二买：一买之后，价格回调但不创新低
+        二卖：一卖之后，价格反弹但不创新高
+        """
+        # 找出所有一类买卖点
+        first_buys = [tp for tp in trade_points if tp.point_type == TradePointType.BUY_1]
+        first_sells = [tp for tp in trade_points if tp.point_type == TradePointType.SELL_1]
+        
+        # 识别二买
+        for buy1 in first_buys:
+            # 找一买对应的笔索引
+            buy1_stroke_idx = -1
+            for idx, stroke in enumerate(self.strokes):
+                if stroke.end_dt == buy1.dt:
+                    buy1_stroke_idx = idx
+                    break
+            
+            if buy1_stroke_idx < 0 or buy1_stroke_idx + 2 >= len(self.strokes):
+                continue
+            
+            # 一买后的第二笔（回调笔，向下）
+            pullback = self.strokes[buy1_stroke_idx + 2] if buy1_stroke_idx + 2 < len(self.strokes) else None
+            
+            if pullback and pullback.direction == Direction.DOWN:
+                # 回调不创新低
+                if pullback.end_price > buy1.price:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.BUY_2,
+                        dt=pullback.end_dt,
+                        price=pullback.end_price,
+                        strength=0.75,
+                        description="第二类买点：一买后回调不创新低",
                         index=len(trade_points)
                     )
                     trade_points.append(trade_point)
         
-        # 基于中枢识别三类买卖点
-        for i, pivot in enumerate(self.pivots):
-            # 找中枢后的第一笔
+        # 识别二卖
+        for sell1 in first_sells:
+            # 找一卖对应的笔索引
+            sell1_stroke_idx = -1
+            for idx, stroke in enumerate(self.strokes):
+                if stroke.end_dt == sell1.dt:
+                    sell1_stroke_idx = idx
+                    break
+            
+            if sell1_stroke_idx < 0 or sell1_stroke_idx + 2 >= len(self.strokes):
+                continue
+            
+            # 一卖后的第二笔（反弹笔，向上）
+            bounce = self.strokes[sell1_stroke_idx + 2] if sell1_stroke_idx + 2 < len(self.strokes) else None
+            
+            if bounce and bounce.direction == Direction.UP:
+                # 反弹不创新高
+                if bounce.end_price < sell1.price:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.SELL_2,
+                        dt=bounce.end_dt,
+                        price=bounce.end_price,
+                        strength=0.75,
+                        description="第二类卖点：一卖后反弹不创新高",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+    
+    def _identify_third_class_points(self, trade_points: List[TradePoint]):
+        """
+        识别第三类买卖点
+        
+        三买：向上离开中枢后，回踩不进入中枢区间
+        三卖：向下离开中枢后，反抽不进入中枢区间
+        """
+        for pivot in self.pivots:
+            # 找中枢结束时对应的笔索引
             pivot_end_index = -1
             for j, stroke in enumerate(self.strokes):
                 if stroke.end_dt == pivot.end_dt:
                     pivot_end_index = j
                     break
             
-            if pivot_end_index >= 0 and pivot_end_index < len(self.strokes) - 1:
-                next_stroke = self.strokes[pivot_end_index + 1]
-                
-                # 第三类买点：向上突破中枢
-                if next_stroke.direction == Direction.UP and next_stroke.low > pivot.high:
+            if pivot_end_index < 0 or pivot_end_index + 2 >= len(self.strokes):
+                continue
+            
+            # 离开中枢的笔
+            leave_stroke = self.strokes[pivot_end_index + 1] if pivot_end_index + 1 < len(self.strokes) else None
+            # 回踩/反抽的笔
+            return_stroke = self.strokes[pivot_end_index + 2] if pivot_end_index + 2 < len(self.strokes) else None
+            
+            if leave_stroke is None or return_stroke is None:
+                continue
+            
+            # 三买：向上离开中枢（离开笔的低点高于中枢上沿），回踩不进中枢
+            if leave_stroke.direction == Direction.UP and leave_stroke.low > pivot.high:
+                if return_stroke.direction == Direction.DOWN and return_stroke.low > pivot.high:
                     trade_point = TradePoint(
                         point_type=TradePointType.BUY_3,
-                        dt=next_stroke.start_dt,
-                        price=next_stroke.start_price,
+                        dt=return_stroke.end_dt,
+                        price=return_stroke.end_price,
                         strength=0.7,
-                        description="第三类买点：向上突破中枢",
+                        description="第三类买点：向上突破中枢后回踩不进中枢",
                         index=len(trade_points)
                     )
                     trade_points.append(trade_point)
-                
-                # 第三类卖点：向下突破中枢
-                if next_stroke.direction == Direction.DOWN and next_stroke.high < pivot.low:
+            
+            # 三卖：向下离开中枢（离开笔的高点低于中枢下沿），反抽不进中枢
+            if leave_stroke.direction == Direction.DOWN and leave_stroke.high < pivot.low:
+                if return_stroke.direction == Direction.UP and return_stroke.high < pivot.low:
                     trade_point = TradePoint(
                         point_type=TradePointType.SELL_3,
-                        dt=next_stroke.start_dt,
-                        price=next_stroke.start_price,
+                        dt=return_stroke.end_dt,
+                        price=return_stroke.end_price,
                         strength=0.7,
-                        description="第三类卖点：向下突破中枢",
+                        description="第三类卖点：向下突破中枢后反抽不进中枢",
                         index=len(trade_points)
                     )
-                    trade_points.append(trade_point)
-        
-        self.trade_points = trade_points
     
     def to_dict(self) -> Dict[str, Any]:
         """

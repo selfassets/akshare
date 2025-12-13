@@ -130,16 +130,27 @@ async def analyze_chanlun(
         # 5. 转换为 JSON 格式
         result = analyzer.to_dict()
         
-        # 6. 添加统计信息
+        # 6. 根据 level 过滤返回数据
+        if level == "basic":
+            # basic 级别：仅返回分型和笔
+            result["segments"] = []
+            result["pivots"] = []
+            result["trade_points"] = []
+        elif level == "advanced":
+            # advanced 级别：返回分型、笔、线段、中枢，不返回买卖点
+            result["trade_points"] = []
+        # full 级别：返回所有数据，不过滤
+        
+        # 7. 添加统计信息
         result["stats"] = {
             "symbol": symbol,
             "total_bars_raw": len(analyzer.bars_raw),
             "total_bars_merged": len(analyzer.bars_merged),
             "total_fractals": len(analyzer.fractals),
             "total_strokes": len(analyzer.strokes),
-            "total_segments": len(analyzer.segments),
-            "total_pivots": len(analyzer.pivots),
-            "total_trade_points": len(analyzer.trade_points),
+            "total_segments": len(analyzer.segments) if level != "basic" else 0,
+            "total_pivots": len(analyzer.pivots) if level != "basic" else 0,
+            "total_trade_points": len(analyzer.trade_points) if level == "full" else 0,
             "analysis_level": level,
             "analysis_time": datetime.now().isoformat(),
         }
