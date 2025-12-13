@@ -57,7 +57,7 @@ class TdxConnectionManager:
     
     def _connect_hq(self) -> TdxHq_API:
         """连接标准行情服务器"""
-        api = TdxHq_API()
+        api = TdxHq_API(heartbeat=True)
         for server in HQ_SERVERS:
             try:
                 api.connect(server["ip"], server["port"])
@@ -69,7 +69,7 @@ class TdxConnectionManager:
     
     def _connect_exhq(self) -> TdxExHq_API:
         """连接扩展行情服务器"""
-        api = TdxExHq_API()
+        api = TdxExHq_API(heartbeat=True)
         for server in EXHQ_SERVERS:
             try:
                 api.connect(server["ip"], server["port"])
@@ -384,6 +384,30 @@ async def get_futures_quote(
         return _df_to_response(api.to_df(data) if data else None)
     except Exception as e:
         logger.error(f"获取五档行情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/futures/quotes", response_model=List[Dict[str, Any]])
+async def get_instrument_quote_list(
+    codes: str = Query("IFL0,IFL1", description="合约代码，逗号分隔，如: IFL0,IFL1"),
+    market: int = Query(47, description="市场ID，可通过 /futures/markets 获取"),
+):
+    """
+    批量查询期货五档行情
+    
+    - codes: 合约代码列表，逗号分隔
+    - market: 市场ID，默认47（中金所）
+    """
+    api = get_exhq_api()
+    try:
+        code_list = [c.strip() for c in codes.split(",")]
+        # 构建参数列表: [(market, code), ...]
+        params = [(market, code) for code in code_list]
+        
+        data = api.get_instrument_quote_list(market, params)
+        return _df_to_response(api.to_df(data) if data else None)
+    except Exception as e:
+        logger.error(f"批量获取五档行情失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
