@@ -198,29 +198,96 @@ async def get_strokes(
     }
 
 
+def _validate_date_format(date_str: str, field_name: str) -> None:
+    """
+    验证日期格式是否为 YYYYMMDD
+    
+    Args:
+        date_str: 日期字符串
+        field_name: 字段名称（用于错误提示）
+    
+    Raises:
+        HTTPException: 如果日期格式无效
+    """
+    if not date_str:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} 不能为空"
+        )
+    
+    if len(date_str) != 8 or not date_str.isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} 格式错误，应为 YYYYMMDD 格式，当前值: {date_str}"
+        )
+    
+    try:
+        datetime.strptime(date_str, '%Y%m%d')
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} 日期无效，请检查年月日是否正确，当前值: {date_str}"
+        )
+
+
 @router.get("/results", response_model=Dict[str, Any])
 async def get_results(
-    symbol: str = Query("eg2601", description="期货代码"),
-    start_date: str = Query("20250101", description="开始日期 YYYYMMDD"),
-    end_date: str = Query("20261231", description="结束日期 YYYYMMDD"),
+    symbol: str = Query("eg2601", description="期货代码，如 eg2601、热卷主连"),
+    start_date: str = Query("20250101", description="开始日期 YYYYMMDD 格式"),
+    end_date: str = Query("20261231", description="结束日期 YYYYMMDD 格式"),
+    level: Literal["basic", "advanced", "full"] = Query(
+        "full",
+        description="分析级别: basic=分型+笔, advanced=+线段+中枢, full=+买卖点"
+    ),
+    include_bars: bool = Query(
+        False,
+        description="是否包含 K 线数据（raw 和 merged），设置为 true 会增加响应大小"
+    ),
 ):
     """
-    只返回缠论分析的核心结果（不包含K线数据）
+    返回缠论分析的核心结果
     
-    返回数据包括:
-    - fractals: 分型列表
-    - strokes: 笔列表
-    - segments: 线段列表
-    - pivots: 中枢列表
-    - trade_points: 买卖点列表
+    此端点用于前端绑定，默认不返回 K 线数据以减少数据传输量。
+    如需获取 K 线数据，请设置 `include_bars=true`。
     
-    示例:
+    **分析级别说明**:
+    - `basic`: 仅包含分型和笔
+    - `advanced`: 包含分型、笔、线段、中枢
+    - `full`: 包含所有分析结果（分型、笔、线段、中枢、买卖点）
+    
+    **返回数据结构**:
+    - `fractals`: 分型列表 (顶分型/底分型)
+    - `strokes`: 笔列表 (向上笔/向下笔)
+    - `segments`: 线段列表 (仅 advanced/full 级别)
+    - `pivots`: 中枢列表 (仅 advanced/full 级别)
+    - `trade_points`: 买卖点列表 (仅 full 级别)
+    - `stats`: 统计信息
+    - `bars_raw`: 原始 K 线 (仅当 include_bars=true)
+    - `bars_merged`: 合并后 K 线 (仅当 include_bars=true)
+    
+    **示例**:
     ```
     GET /chanlun/results?symbol=eg2601&start_date=20250101&end_date=20261231
+    GET /chanlun/results?symbol=eg2601&start_date=20250101&end_date=20261231&level=advanced
+    GET /chanlun/results?symbol=eg2601&start_date=20250101&end_date=20261231&include_bars=true
     ```
     """
-    result = await analyze_chanlun(symbol, start_date, end_date, "full")
-    return {
+    # 验证日期格式
+    _validate_date_format(start_date, "start_date")
+    _validate_date_format(end_date, "end_date")
+    
+    # 验证日期范围
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail=f"开始日期 ({start_date}) 不能晚于结束日期 ({end_date})"
+        )
+    
+    # 执行分析
+    result = await analyze_chanlun(symbol, start_date, end_date, level)
+    
+    # 构建响应
+    response = {
         "fractals": result["fractals"],
         "strokes": result["strokes"],
         "segments": result["segments"],
@@ -228,6 +295,13 @@ async def get_results(
         "trade_points": result["trade_points"],
         "stats": result["stats"],
     }
+    
+    # 可选包含 K 线数据
+    if include_bars:
+        response["bars_raw"] = result.get("bars_raw", [])
+        response["bars_merged"] = result.get("bars_merged", [])
+    
+    return response
 
 
 
