@@ -1,9 +1,11 @@
 import logging
 import uvicorn
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI,Request
 from fastapi.middleware.cors import CORSMiddleware
 from akshare.api.routers import futures,open,chanlun,tdx
+from akshare.api.routers.tdx import shutdown_connections
 
 # 获取日志级别，默认为 INFO
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -15,10 +17,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    logger.info("AKShare API 启动中...")
+    yield
+    # 应用关闭时断开所有 TDX 连接
+    logger.info("正在关闭 TDX 连接...")
+    shutdown_connections()
+    logger.info("AKShare API 已关闭")
+
+
 app = FastAPI(
     title="AKShare API",
     description="AKShare HTTP API interface",
     version="0.0.1",
+    lifespan=lifespan,
 )
 
 # Configure CORS
