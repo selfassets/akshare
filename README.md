@@ -179,12 +179,12 @@ Please use this **bibtex** if you want to cite this repository in your publicati
 
 ```markdown
 @misc{akshare,
-    author = {Albert King and Yaojie Zhang},
-    title = {AKShare},
-    year = {2022},
-    publisher = {GitHub},
-    journal = {GitHub repository},
-    howpublished = {\url{https://github.com/akfamily/akshare}},
+author = {Albert King and Yaojie Zhang},
+title = {AKShare},
+year = {2022},
+publisher = {GitHub},
+journal = {GitHub repository},
+howpublished = {\url{https://github.com/akfamily/akshare}},
 }
 ```
 
@@ -204,7 +204,7 @@ Thanks for the data provided by [生意社网站](http://www.100ppi.com/);
 
 Thanks for the data provided by [中国银行间市场交易商协会网站](http://www.nafmii.org.cn/);
 
-Thanks for the data provided by [99期货网站](http://www.99qh.com/);
+Thanks for the data provided by [99 期货网站](http://www.99qh.com/);
 
 Thanks for the data provided by [中国外汇交易中心暨全国银行间同业拆借中心网站](http://www.chinamoney.com.cn/chinese/);
 
