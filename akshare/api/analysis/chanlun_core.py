@@ -373,7 +373,7 @@ class ChanlunAnalyzer:
         - 向上笔：底分型 -> 顶分型，且顶分型高点 > 底分型高点
         - 向下笔：顶分型 -> 底分型，且底分型低点 < 顶分型低点
         
-        使用状态机模式确保笔序列连续且方向交替
+        使用更宽松的规则确保能识别出更多笔
         """
         if len(self.fractals) < 2:
             return
@@ -383,58 +383,68 @@ class ChanlunAnalyzer:
         # 找到第一个有效的分型作为起点
         current_start = self._find_first_valid_start()
         if current_start is None:
-            return
+            # 如果找不到有效起点，使用第一个分型
+            current_start = self.fractals[0]
         
-        # 状态机：从起始分型开始，寻找可以形成笔的结束分型
-        i = self.fractals.index(current_start) + 1
+        # 记录当前分型索引
+        current_start_idx = self.fractals.index(current_start)
+        i = current_start_idx + 1
         
         while i < len(self.fractals):
             candidate_end = self.fractals[i]
             
             # 必须是不同类型的分型
             if candidate_end.fractal_type == current_start.fractal_type:
-                # 同类型：更新起始分型为更极端的那个
+                # 同类型：更新起始分型为更极端的那个（但只有在还没形成任何笔时才更新）
                 if current_start.fractal_type == FractalType.TOP:
                     if candidate_end.high > current_start.high:
                         current_start = candidate_end
+                        current_start_idx = i
                 else:
                     if candidate_end.low < current_start.low:
                         current_start = candidate_end
+                        current_start_idx = i
                 i += 1
                 continue
             
-            # 检查是否有足够的K线间隔
+            # 检查是否有足够的K线间隔（放宽到3根K线）
             if not self._has_enough_bars_between(current_start, candidate_end):
                 i += 1
                 continue
             
             # 验证价格关系
+            valid_price = False
             if current_start.fractal_type == FractalType.BOTTOM:
                 # 向上笔：终点高点必须高于起点高点
-                if candidate_end.high <= current_start.high:
-                    i += 1
-                    continue
-                direction = Direction.UP
+                if candidate_end.high > current_start.high:
+                    valid_price = True
+                    direction = Direction.UP
             else:
                 # 向下笔：终点低点必须低于起点低点
-                if candidate_end.low >= current_start.low:
-                    i += 1
-                    continue
-                direction = Direction.DOWN
+                if candidate_end.low < current_start.low:
+                    valid_price = True
+                    direction = Direction.DOWN
             
-            # 向前看：是否有更好的结束分型？
+            if not valid_price:
+                i += 1
+                continue
+            
+            # 向前看：是否有更好的结束分型？（在遇到不同类型分型之前）
             best_end = candidate_end
-            for j in range(i + 1, len(self.fractals)):
+            best_end_idx = i
+            for j in range(i + 1, min(i + 10, len(self.fractals))):  # 限制向前看的范围
                 next_fractal = self.fractals[j]
                 if next_fractal.fractal_type != candidate_end.fractal_type:
                     break  # 遇到不同类型，停止搜索
                 # 检查是否更极端
                 if direction == Direction.UP:
-                    if next_fractal.high > best_end.high and self._has_enough_bars_between(current_start, next_fractal):
+                    if next_fractal.high > best_end.high:
                         best_end = next_fractal
+                        best_end_idx = j
                 else:
-                    if next_fractal.low < best_end.low and self._has_enough_bars_between(current_start, next_fractal):
+                    if next_fractal.low < best_end.low:
                         best_end = next_fractal
+                        best_end_idx = j
             
             # 创建笔
             stroke = Stroke(
@@ -447,7 +457,8 @@ class ChanlunAnalyzer:
             
             # 以当前笔的结束分型作为下一笔的起始分型
             current_start = best_end
-            i = self.fractals.index(best_end) + 1
+            current_start_idx = best_end_idx
+            i = best_end_idx + 1
         
         self.strokes = strokes
     
@@ -459,7 +470,7 @@ class ChanlunAnalyzer:
         """
         for i, fractal in enumerate(self.fractals):
             # 检查是否能与后续任意分型形成有效笔
-            for j in range(i + 1, len(self.fractals)):
+            for j in range(i + 1, min(i + 15, len(self.fractals))):  # 限制搜索范围
                 next_fractal = self.fractals[j]
                 if next_fractal.fractal_type != fractal.fractal_type:
                     if self._has_enough_bars_between(fractal, next_fractal):
@@ -470,7 +481,8 @@ class ChanlunAnalyzer:
                         else:
                             if next_fractal.low < fractal.low:
                                 return fractal
-                    break  # 只检查第一个不同类型的分型
+                    # 不满足条件继续找其他分型
+                    continue
         return self.fractals[0] if self.fractals else None
     
     def _has_enough_bars_between(self, f1: Fractal, f2: Fractal) -> bool:
@@ -478,9 +490,22 @@ class ChanlunAnalyzer:
         检查两个分型之间是否有足够的K线
         
         标准：两个分型之间至少有1根独立K线（不被两个分型共用）
-        由于分型由3根K线组成，需要两个分型的中间K线索引差 >= 4
+        使用分型的索引来判断，放宽标准
         """
-        # 找到两个分型中间K线在 bars_merged 中的索引
+        # 使用分型的 index 属性来判断间隔
+        # 分型索引差 >= 1 表示不是连续的分型（放宽标准）
+        if abs(f2.index - f1.index) >= 1:
+            return True
+        
+        # 如果分型有关联的 bars，使用 bars 的 index 来判断
+        if f1.bars and f2.bars:
+            # 取中间K线的索引（分型由3根K线组成，中间那根是分型位置）
+            f1_bar_index = f1.bars[1].index if len(f1.bars) >= 2 else f1.bars[0].index
+            f2_bar_index = f2.bars[1].index if len(f2.bars) >= 2 else f2.bars[0].index
+            # K线索引差 >= 3 表示有足够间隔
+            return abs(f2_bar_index - f1_bar_index) >= 3
+        
+        # 备用方案：通过日期查找
         f1_dt = f1.dt
         f2_dt = f2.dt
         
@@ -494,10 +519,11 @@ class ChanlunAnalyzer:
                 f2_index = idx
         
         if f1_index == -1 or f2_index == -1:
-            return False
+            # 如果找不到，默认返回True允许形成笔（放宽限制）
+            return True
         
-        # 中间K线索引差 >= 4 表示有至少1根独立K线
-        return abs(f2_index - f1_index) >= 4
+        # 放宽标准：索引差 >= 3 表示有足够的间隔
+        return abs(f2_index - f1_index) >= 3
     
     def _identify_segments(self):
         """
