@@ -7,11 +7,15 @@
 from pytdx.hq import TdxHq_API
 from pytdx.exhq import TdxExHq_API
 
-# 服务器配置
+# 标准行情服务器配置
 HQ_SERVER_HOST = "121.37.207.165"
 HQ_SERVER_PORT = 7709
-EXHQ_SERVER_HOST = "119.23.127.172"
-EXHQ_SERVER_PORT = 7727
+
+# 扩展行情服务器列表 (经测试可用的服务器)
+EXHQ_SERVERS = [
+    {"ip": "112.74.214.43", "port": 7727, "name": "扩展市场深圳双线1"},
+    {"ip": "121.37.232.167", "port": 7727, "name": "原测试服务器"},
+]
 
 
 def test_standard_hq():
@@ -39,15 +43,21 @@ def test_standard_hq():
         api.disconnect()
 
 
-def test_extended_hq():
-    """测试扩展行情接口 (期货/外汇等)"""
-    print("\n" + "=" * 50)
-    print("测试扩展行情接口 (TdxExHq_API)")
-    print("=" * 50)
+def test_extended_hq(host: str, port: int, name: str = ""):
+    """测试扩展行情接口 (期货/外汇等)
+    
+    Args:
+        host: 服务器IP地址
+        port: 服务器端口
+        name: 服务器名称
+    """
+    print("\n" + "=" * 60)
+    print(f"测试扩展行情接口: {name} ({host}:{port})")
+    print("=" * 60)
     
     api = TdxExHq_API()
     try:
-        api.connect(EXHQ_SERVER_HOST, EXHQ_SERVER_PORT)
+        api.connect(host, port)
         
         # 1. 获取市场列表
         print("\n[1] 获取市场列表 (get_markets):")
@@ -100,12 +110,44 @@ def test_extended_hq():
         history_trans = api.get_history_transaction_data(47, "IFL0", 20241201, 0, 10)
         print(api.to_df(history_trans) if history_trans else "无数据")
         
+        return True
+        
     except Exception as e:
-        print(f"扩展行情接口测试失败: {e}")
+        print(f"❌ 连接或测试失败: {e}")
+        return False
     finally:
         api.disconnect()
 
 
 if __name__ == "__main__":
     # test_standard_hq()
-    test_extended_hq()
+    
+    # 循环测试所有扩展行情服务器
+    print("开始循环测试所有扩展行情服务器...")
+    print(f"共 {len(EXHQ_SERVERS)} 个服务器\n")
+    
+    results = []
+    for i, server in enumerate(EXHQ_SERVERS, 1):
+        print(f"\n{'#' * 60}")
+        print(f"# 服务器 {i}/{len(EXHQ_SERVERS)}")
+        print(f"{'#' * 60}")
+        
+        success = test_extended_hq(
+            host=server["ip"],
+            port=server["port"],
+            name=server.get("name", "未命名")
+        )
+        results.append({
+            "name": server.get("name", "未命名"),
+            "ip": server["ip"],
+            "port": server["port"],
+            "success": success
+        })
+    
+    # 打印测试结果汇总
+    print("\n" + "=" * 60)
+    print("测试结果汇总")
+    print("=" * 60)
+    for r in results:
+        status = "✅ 成功" if r["success"] else "❌ 失败"
+        print(f"{status} | {r['name']} ({r['ip']}:{r['port']})")
