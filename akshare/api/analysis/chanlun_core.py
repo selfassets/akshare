@@ -207,14 +207,14 @@ class ChanlunAnalyzer:
         # 3. 识别笔
         self._identify_strokes()
         
-        # 4. 识别线段（可选）
-        # self._identify_segments()
+        # 4. 识别线段
+        self._identify_segments()
         
-        # 5. 识别中枢（可选）
-        # self._identify_pivots()
+        # 5. 识别中枢
+        self._identify_pivots()
         
-        # 6. 识别买卖点（可选）
-        # self._identify_trade_points()
+        # 6. 识别买卖点
+        self._identify_trade_points()
     
     def _merge_bars(self):
         """
@@ -403,12 +403,64 @@ class ChanlunAnalyzer:
         识别线段
         
         线段定义：
-        - 由至少3笔构成
-        - 线段分型：特征序列的高低点
-        - 线段破坏：被线段分型破坏
+        - 至少由3笔构成
+        - 线段方向由第一笔确定
+        - 当出现反向的特征序列分型时，线段结束
         """
-        # TODO: 实现线段识别逻辑
-        pass
+        if len(self.strokes) < 3:
+            return
+        
+        segments = []
+        i = 0
+        
+        while i < len(self.strokes):
+            # 线段起始笔
+            start_stroke = self.strokes[i]
+            direction = start_stroke.direction
+            
+            # 收集同方向的笔
+            strokes_in_segment = [start_stroke]
+            j = i + 1
+            
+            while j < len(self.strokes):
+                current_stroke = self.strokes[j]
+                next_stroke = self.strokes[j + 1] if j + 1 < len(self.strokes) else None
+                
+                # 检查是否形成线段终止（特征序列分型破坏）
+                if next_stroke and len(strokes_in_segment) >= 3:
+                    # 简化判断：如果连续出现反向笔导致价格突破前高/前低，则线段结束
+                    if direction == Direction.UP:
+                        # 向上线段：如果价格跌破前低，线段结束
+                        if current_stroke.end_price < strokes_in_segment[-2].end_price:
+                            break
+                    else:
+                        # 向下线段：如果价格突破前高，线段结束
+                        if current_stroke.end_price > strokes_in_segment[-2].end_price:
+                            break
+                
+                strokes_in_segment.append(current_stroke)
+                j += 1
+                
+                # 限制线段长度，避免过长
+                if len(strokes_in_segment) >= 20:
+                    break
+            
+            # 创建线段（至少3笔）
+            if len(strokes_in_segment) >= 3:
+                segment = Segment(
+                    direction=direction,
+                    strokes=strokes_in_segment,
+                    start_dt=strokes_in_segment[0].start_dt,
+                    end_dt=strokes_in_segment[-1].end_dt,
+                    high=max(s.high for s in strokes_in_segment),
+                    low=min(s.low for s in strokes_in_segment),
+                    index=len(segments)
+                )
+                segments.append(segment)
+            
+            i = j if j > i else i + 1
+        
+        self.segments = segments
     
     def _identify_pivots(self):
         """
@@ -417,22 +469,156 @@ class ChanlunAnalyzer:
         中枢定义：
         - 至少3笔重叠部分构成中枢
         - 中枢区间 = 重叠部分的高低点
-        - 中枢扩展：后续笔在中枢区间内震荡
+        - 简化实现：基于连续的笔找出价格重叠区间
         """
-        # TODO: 实现中枢识别逻辑
-        pass
+        if len(self.strokes) < 3:
+            return
+        
+        pivots = []
+        i = 0
+        
+        while i <= len(self.strokes) - 3:
+            # 取3笔检查是否有重叠
+            stroke1 = self.strokes[i]
+            stroke2 = self.strokes[i + 1]
+            stroke3 = self.strokes[i + 2]
+            
+            # 计算重叠区间
+            overlap_high = min(stroke1.high, stroke2.high, stroke3.high)
+            overlap_low = max(stroke1.low, stroke2.low, stroke3.low)
+            
+            # 如果有重叠，形成中枢
+            if overlap_high > overlap_low:
+                # 扩展中枢：继续向后找更多重叠的笔
+                j = i + 3
+                strokes_in_pivot = [stroke1, stroke2, stroke3]
+                
+                while j < len(self.strokes):
+                    next_stroke = self.strokes[j]
+                    # 检查是否在中枢区间内
+                    if next_stroke.low <= overlap_high and next_stroke.high >= overlap_low:
+                        strokes_in_pivot.append(next_stroke)
+                        # 更新中枢区间
+                        overlap_high = min(overlap_high, next_stroke.high)
+                        overlap_low = max(overlap_low, next_stroke.low)
+                        j += 1
+                    else:
+                        break
+                
+                # 创建中枢
+                pivot = Pivot(
+                    level=1,  # 简化实现，统一为1级
+                    direction=stroke1.direction,
+                    high=overlap_high,
+                    low=overlap_low,
+                    start_dt=strokes_in_pivot[0].start_dt,
+                    end_dt=strokes_in_pivot[-1].end_dt,
+                    strokes=strokes_in_pivot,
+                    index=len(pivots)
+                )
+                pivots.append(pivot)
+                i = j
+            else:
+                i += 1
+        
+        self.pivots = pivots
     
     def _identify_trade_points(self):
         """
         识别买卖点
         
-        买卖点类型：
-        - 第一类：背驰点，趋势衰竭
-        - 第二类：回抽确认点
-        - 第三类：中枢突破点
+        买卖点类型（简化实现）：
+        - 第一类买点：下跌趋势的最低点（底背驰）
+        - 第三类买点：中枢突破向上
+        - 第一类卖点：上涨趋势的最高点（顶背驰）
+        - 第三类卖点：中枢突破向下
         """
-        # TODO: 实现买卖点识别逻辑
-        pass
+        trade_points = []
+        
+        # 基于笔识别买卖点
+        for i, stroke in enumerate(self.strokes):
+            if i == 0:
+                continue
+            
+            prev_stroke = self.strokes[i - 1]
+            
+            # 第一类买点：向下笔后的向上笔，且创新低后反转
+            if prev_stroke.direction == Direction.DOWN and stroke.direction == Direction.UP:
+                # 检查是否是局部最低点
+                is_low_point = True
+                for j in range(max(0, i - 3), min(len(self.strokes), i + 3)):
+                    if j != i - 1 and self.strokes[j].low < prev_stroke.low:
+                        is_low_point = False
+                        break
+                
+                if is_low_point:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.BUY_1,
+                        dt=stroke.start_dt,
+                        price=stroke.start_price,
+                        strength=0.8,
+                        description="第一类买点：底部反转",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+            
+            # 第一类卖点：向上笔后的向下笔，且创新高后反转
+            if prev_stroke.direction == Direction.UP and stroke.direction == Direction.DOWN:
+                # 检查是否是局部最高点
+                is_high_point = True
+                for j in range(max(0, i - 3), min(len(self.strokes), i + 3)):
+                    if j != i - 1 and self.strokes[j].high > prev_stroke.high:
+                        is_high_point = False
+                        break
+                
+                if is_high_point:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.SELL_1,
+                        dt=stroke.start_dt,
+                        price=stroke.start_price,
+                        strength=0.8,
+                        description="第一类卖点：顶部反转",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+        
+        # 基于中枢识别三类买卖点
+        for i, pivot in enumerate(self.pivots):
+            # 找中枢后的第一笔
+            pivot_end_index = -1
+            for j, stroke in enumerate(self.strokes):
+                if stroke.end_dt == pivot.end_dt:
+                    pivot_end_index = j
+                    break
+            
+            if pivot_end_index >= 0 and pivot_end_index < len(self.strokes) - 1:
+                next_stroke = self.strokes[pivot_end_index + 1]
+                
+                # 第三类买点：向上突破中枢
+                if next_stroke.direction == Direction.UP and next_stroke.low > pivot.high:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.BUY_3,
+                        dt=next_stroke.start_dt,
+                        price=next_stroke.start_price,
+                        strength=0.7,
+                        description="第三类买点：向上突破中枢",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+                
+                # 第三类卖点：向下突破中枢
+                if next_stroke.direction == Direction.DOWN and next_stroke.high < pivot.low:
+                    trade_point = TradePoint(
+                        point_type=TradePointType.SELL_3,
+                        dt=next_stroke.start_dt,
+                        price=next_stroke.start_price,
+                        strength=0.7,
+                        description="第三类卖点：向下突破中枢",
+                        index=len(trade_points)
+                    )
+                    trade_points.append(trade_point)
+        
+        self.trade_points = trade_points
     
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -488,13 +674,39 @@ class ChanlunAnalyzer:
                 for stroke in self.strokes
             ],
             "segments": [
-                # TODO: 添加线段数据
+                {
+                    "direction": segment.direction.value,
+                    "start_dt": segment.start_dt.isoformat(),
+                    "end_dt": segment.end_dt.isoformat(),
+                    "high": segment.high,
+                    "low": segment.low,
+                    "stroke_count": len(segment.strokes),
+                }
+                for segment in self.segments
             ],
             "pivots": [
-                # TODO: 添加中枢数据
+                {
+                    "level": pivot.level,
+                    "direction": pivot.direction.value,
+                    "high": pivot.high,
+                    "low": pivot.low,
+                    "center": pivot.center,
+                    "amplitude": pivot.amplitude,
+                    "start_dt": pivot.start_dt.isoformat(),
+                    "end_dt": pivot.end_dt.isoformat(),
+                    "stroke_count": len(pivot.strokes),
+                }
+                for pivot in self.pivots
             ],
             "trade_points": [
-                # TODO: 添加买卖点数据
+                {
+                    "type": point.point_type.value,
+                    "dt": point.dt.isoformat(),
+                    "price": point.price,
+                    "strength": point.strength,
+                    "description": point.description,
+                }
+                for point in self.trade_points
             ],
         }
 
