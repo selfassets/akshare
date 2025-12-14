@@ -6,7 +6,7 @@ import atexit
 from contextlib import asynccontextmanager
 from fastapi import FastAPI,Request
 from fastapi.middleware.cors import CORSMiddleware
-from akshare.api.routers import futures,open,chanlun,tdx
+from akshare.api.routers import futures,open,chanlun,tdx,indicators
 from akshare.api.routers.tdx import shutdown_connections
 
 # 获取日志级别，默认为 INFO
@@ -82,6 +82,7 @@ app.include_router(futures.router, prefix="/futures", tags=["futures"])
 app.include_router(open.router, prefix="/open", tags=["open"])
 app.include_router(chanlun.router, prefix="/chanlun", tags=["chanlun"])
 app.include_router(tdx.router, prefix="/tdx", tags=["tdx"])
+app.include_router(indicators.router, prefix="/indicators", tags=["indicators"])
 
 @app.get("/")
 async def root(request: Request):
@@ -94,7 +95,8 @@ async def root(request: Request):
         "endpoints": [
             "/futures",
             "/chanlun",
-            "/tdx"
+            "/tdx",
+            "/indicators"
         ]
     }
 
